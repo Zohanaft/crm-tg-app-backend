@@ -9,4 +9,14 @@ export class AppController {
   getHello(): string {
     return this.appService.getHello();
   }
+
+  /** Проверка работы приложения и подключения к PostgreSQL */
+  @Get('health')
+  async health() {
+    const database = await this.appService.checkDatabase();
+    return {
+      status: database.ok ? 'ok' : 'error',
+      database: database.ok ? 'connected' : database.message + 'connected',
+    };
+  }
 }

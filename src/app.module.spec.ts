@@ -3,17 +3,20 @@ import { AppModule } from './app.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
-import { UsersModule } from './users/users.module';
-import { ClientsModule } from './clients/clients.module';
 import { ChatsModule } from './chats/chats.module';
-import { MessagesModule } from './messages/messages.module';
+import { ClientsModule } from './clients/clients.module';
 import { DealsModule } from './deals/deals.module';
+import { MessagesModule } from './messages/messages.module';
+import { PrismaModule } from './prisma/prisma.module';
+import { PrismaService } from './prisma/prisma.service';
 import { TelegramModule } from './telegram/telegram.module';
+import { UsersModule } from './users/users.module';
 
 describe('AppModule', () => {
   let moduleRef: TestingModule;
 
   const expectedImportedModules = [
+    PrismaModule,
     AuthModule,
     UsersModule,
     ClientsModule,
@@ -26,7 +29,15 @@ describe('AppModule', () => {
   beforeEach(async () => {
     moduleRef = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      .overrideProvider(PrismaService)
+      .useValue({
+        onModuleInit: () => Promise.resolve(),
+        onModuleDestroy: () => Promise.resolve(),
+        $connect: () => Promise.resolve(),
+        $disconnect: () => Promise.resolve(),
+      })
+      .compile();
   });
 
   it('должен успешно скомпилироваться с подключёнными модулями', () => {

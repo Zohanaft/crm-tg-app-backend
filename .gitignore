@@ -28,3 +28,10 @@ lerna-debug.log*
 .env
 .env.*
 !.env.example
+!.env.example.local
+!.env.example.prod
+!.env.example.prod-preview
+!.env.docker
+
+# Prisma generated client
+src/generated
