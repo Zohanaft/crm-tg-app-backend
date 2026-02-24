@@ -12,6 +12,7 @@
     "prestart": "npm run test",
     "start": "nest start",
     "start:dev": "nest start --watch",
+    "start:dev:docker": "nodemon",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/src/main",
     "prod-preview": "npm test && prisma generate && nest build && node dist/main",
@@ -56,6 +57,7 @@
     "ts-loader": "^9.5.2",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
+    "nodemon": "^3.1.0",
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.20.0"
   },
