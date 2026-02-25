@@ -16,4 +16,4 @@ COPY . .
 RUN npx prisma generate
 
 # Dev: install deps (populate node_modules volume) then run
-CMD ["sh", "-c", "npm ci && npm run start:dev:docker"]
+CMD ["sh", "-c", "npm ci && npx prisma migrate deploy && npm run start:dev:docker"]
