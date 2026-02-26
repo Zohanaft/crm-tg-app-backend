@@ -1,7 +1,11 @@
-import { Body, Controller, Post, Res, UnauthorizedException } from '@nestjs/common';
-import type { Response } from 'express';
+import { Body, Controller, Post, Req, Res, UnauthorizedException } from '@nestjs/common';
+import type { Request, Response } from 'express';
 import type { TelegramAuthPayload } from './auth.service';
 import { AuthService } from './auth.service';
+
+const accessMaxAge = 15 * 60;
+const refreshMaxAge = 7 * 24 * 60 * 60;
+const secureSuffix = process.env.NODE_ENV === 'production' ? '; Secure' : '';
 
 @Controller()
 export class AuthController {
@@ -19,12 +23,9 @@ export class AuthController {
     const { user, accessToken, refreshToken } =
       await this.authService.loginWithTelegram(body, botToken);
 
-    const accessMaxAge = 15 * 60; // 15 min in seconds
-    const refreshMaxAge = 7 * 24 * 60 * 60; // 7 days in seconds
-
     res.setHeader('Set-Cookie', [
-      `access_token=${accessToken}; Max-Age=${accessMaxAge}; Path=/; HttpOnly; SameSite=Lax${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`,
-      `refresh_token=${refreshToken}; Max-Age=${refreshMaxAge}; Path=/; HttpOnly; SameSite=Lax${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`,
+      `access_token=${accessToken}; Max-Age=${accessMaxAge}; Path=/; HttpOnly; SameSite=Lax${secureSuffix}`,
+      `refresh_token=${refreshToken}; Max-Age=${refreshMaxAge}; Path=/; HttpOnly; SameSite=Lax${secureSuffix}`,
     ]);
 
     res.json({
@@ -38,5 +39,28 @@ export class AuthController {
         photoUrl: user.photoUrl,
       },
     });
+  }
+
+  @Post('refresh')
+  async refresh(@Req() req: Request, @Res({ passthrough: false }) res: Response) {
+    const refreshToken = req.cookies?.refresh_token;
+    const { accessToken, refreshToken: newRefreshToken } =
+      this.authService.refresh(refreshToken);
+
+    res.setHeader('Set-Cookie', [
+      `access_token=${accessToken}; Max-Age=${accessMaxAge}; Path=/; HttpOnly; SameSite=Lax${secureSuffix}`,
+      `refresh_token=${newRefreshToken}; Max-Age=${refreshMaxAge}; Path=/; HttpOnly; SameSite=Lax${secureSuffix}`,
+    ]);
+    return { ok: true };
+  }
+
+  @Post('logout')
+  logout(@Res({ passthrough: false }) res: Response) {
+    const base = 'Path=/; HttpOnly; SameSite=Lax; Max-Age=0';
+    res.setHeader('Set-Cookie', [
+      `access_token=; ${base}${secureSuffix}`,
+      `refresh_token=; ${base}${secureSuffix}`,
+    ]);
+    return { ok: true };
   }
 }

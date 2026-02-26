@@ -14,11 +14,13 @@ if (!process.env.DATABASE_URL && process.env.POSTGRES_DB_USER && process.env.POS
   process.env.DATABASE_URL = `postgresql://${user}:${password}@${host}:${port}/${dbName}`;
 }
 
+import cookieParser from 'cookie-parser';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  app.use(cookieParser());
   const port = Number(process.env.PORT) || 3000;
   const host = process.env.HOST ?? '0.0.0.0';
   try {
