@@ -1,7 +1,24 @@
-import { Body, Controller, Get, Post, Req, Res, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Post, Query, Req, Res, UnauthorizedException } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import type { TelegramAuthPayload } from './auth.service';
 import { AuthService } from './auth.service';
+
+function parseTgAuthResult(tgAuthResult: string | undefined): TelegramAuthPayload {
+  if (!tgAuthResult || typeof tgAuthResult !== 'string') {
+    throw new BadRequestException('tgAuthResult is required');
+  }
+  try {
+    const json = Buffer.from(tgAuthResult, 'base64').toString('utf8');
+    const payload = JSON.parse(json) as TelegramAuthPayload;
+    if (typeof payload?.id !== 'number' || typeof payload?.auth_date !== 'number' || typeof payload?.hash !== 'string') {
+      throw new BadRequestException('Invalid tgAuthResult payload');
+    }
+    return payload;
+  } catch (err) {
+    if (err instanceof BadRequestException) throw err;
+    throw new BadRequestException('Invalid tgAuthResult encoding');
+  }
+}
 
 const accessMaxAge = 15 * 60;
 const refreshMaxAge = 7 * 24 * 60 * 60;
@@ -41,6 +58,34 @@ export class AuthController {
     });
   }
 
+  @Get('auth/telegram')
+  async authTelegram(
+    @Query('tgAuthResult') tgAuthResult: string | undefined,
+    @Req() req: Request,
+    @Res({ passthrough: false }) res: Response,
+  ) {
+    const botToken = process.env.TG_AUTH_BOT_TOKEN;
+    if (!botToken) {
+      throw new UnauthorizedException('Telegram bot token not configured');
+    }
+    const payload = parseTgAuthResult(tgAuthResult);
+    const { user, accessToken, refreshToken } =
+      await this.authService.loginWithTelegram(payload, botToken);
+
+    res.setHeader('Set-Cookie', [
+      `access_token=${accessToken}; Max-Age=${accessMaxAge}; Path=/; HttpOnly; SameSite=Lax${secureSuffix}`,
+      `refresh_token=${refreshToken}; Max-Age=${refreshMaxAge}; Path=/; HttpOnly; SameSite=Lax${secureSuffix}`,
+    ]);
+
+    const frontendUrl = process.env.FRONTEND_URL;
+    const redirectPath = '/dashboard';
+    const redirectUrl = frontendUrl
+      ? `${frontendUrl.replace(/\/$/, '')}${redirectPath}`
+      : `${req.protocol}://${req.get('Host') ?? ''}${redirectPath}`;
+
+    res.redirect(302, redirectUrl);
+  }
+
   @Get('profile')
   async profile(@Req() req: Request, @Res({ passthrough: false }) res: Response) {
     const accessToken = req.cookies?.access_token;
@@ -65,7 +110,7 @@ export class AuthController {
       `access_token=${accessToken}; Max-Age=${accessMaxAge}; Path=/; HttpOnly; SameSite=Lax${secureSuffix}`,
       `refresh_token=${newRefreshToken}; Max-Age=${refreshMaxAge}; Path=/; HttpOnly; SameSite=Lax${secureSuffix}`,
     ]);
-    res.json({ ok: true });
+    res.json({ ok: true, accessToken, refreshToken: newRefreshToken });
   }
 
   @Post('logout')
