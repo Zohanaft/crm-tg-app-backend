@@ -1,4 +1,4 @@
-import { Body, Controller, Post, Req, Res, UnauthorizedException } from '@nestjs/common';
+import { Body, Controller, Get, Post, Req, Res, UnauthorizedException } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import type { TelegramAuthPayload } from './auth.service';
 import { AuthService } from './auth.service';
@@ -41,6 +41,20 @@ export class AuthController {
     });
   }
 
+  @Get('profile')
+  async profile(@Req() req: Request, @Res({ passthrough: false }) res: Response) {
+    const accessToken = req.cookies?.access_token;
+    const user = await this.authService.getProfileFromAccessToken(accessToken);
+    res.json({
+      id: user.id,
+      telegramId: String(user.telegramId),
+      firstName: user.firstName,
+      lastName: user.lastName,
+      username: user.username,
+      photoUrl: user.photoUrl,
+    });
+  }
+
   @Post('refresh')
   async refresh(@Req() req: Request, @Res({ passthrough: false }) res: Response) {
     const refreshToken = req.cookies?.refresh_token;
@@ -51,7 +65,7 @@ export class AuthController {
       `access_token=${accessToken}; Max-Age=${accessMaxAge}; Path=/; HttpOnly; SameSite=Lax${secureSuffix}`,
       `refresh_token=${newRefreshToken}; Max-Age=${refreshMaxAge}; Path=/; HttpOnly; SameSite=Lax${secureSuffix}`,
     ]);
-    return { ok: true };
+    res.json({ ok: true });
   }
 
   @Post('logout')
@@ -61,6 +75,6 @@ export class AuthController {
       `access_token=; ${base}${secureSuffix}`,
       `refresh_token=; ${base}${secureSuffix}`,
     ]);
-    return { ok: true };
+    res.json({ ok: true });
   }
 }

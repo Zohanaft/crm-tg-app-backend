@@ -94,6 +94,30 @@ export class AuthService {
     return { user, accessToken, refreshToken };
   }
 
+  async getProfileFromAccessToken(accessToken: string) {
+    if (!accessToken) {
+      throw new UnauthorizedException('Access token required');
+    }
+    try {
+      const payload = this.jwtService.verify<TokenPayload>(accessToken);
+      if (payload.type !== 'access') {
+        throw new UnauthorizedException('Invalid token type');
+      }
+      const user = await this.prisma.user.findUnique({
+        where: { id: payload.sub },
+      });
+      if (!user) {
+        throw new UnauthorizedException('User not found');
+      }
+      return user;
+    } catch (err: unknown) {
+      if (err && typeof err === 'object' && 'name' in err && (err as { name: string }).name === 'TokenExpiredError') {
+        throw new UnauthorizedException('Access token expired');
+      }
+      throw new UnauthorizedException('Invalid access token');
+    }
+  }
+
   refresh(refreshToken: string) {
     if (!refreshToken) {
       throw new UnauthorizedException('Refresh token required');
