@@ -94,6 +94,16 @@ export class AuthService {
     return { user, accessToken, refreshToken };
   }
 
+  async getProfileById(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+    return user;
+  }
+
   async getProfileFromAccessToken(accessToken: string) {
     if (!accessToken) {
       throw new UnauthorizedException('Access token required');

@@ -20,4 +20,24 @@ model User {
   authDate   Int?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+  bots       TgBot[]
+}
+
+model TgBot {
+  id                      String   @id @default(cuid())
+  userId                  String
+  user                    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  botId                   BigInt   @unique
+  token                   String   @unique
+  isBot                   Boolean?
+  firstName               String?
+  username                String?
+  canJoinGroups           Boolean?
+  canReadAllGroupMessages Boolean?
+  supportsInlineQueries   Boolean?
+  rawData                 Json?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  @@map("tg_bots")
 }
