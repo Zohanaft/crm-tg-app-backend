@@ -1,6 +1,10 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { CacheService } from '../cache/cache.service';
 import type { User } from '../generated/prisma/client';
+
+const BOTS_CACHE_KEY_PREFIX = 'bots:';
+const BOTS_CACHE_TTL_SEC = 300;
 
 interface TelegramGetMeResponse {
   ok: boolean;
@@ -17,7 +21,10 @@ interface TelegramGetMeResponse {
 
 @Injectable()
 export class BotsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache: CacheService,
+  ) {}
 
   private async fetchTelegramGetMe(token: string): Promise<NonNullable<TelegramGetMeResponse['result']>> {
     const url = `https://api.telegram.org/bot${encodeURIComponent(token)}/getMe`;
@@ -71,6 +78,7 @@ export class BotsService {
       },
     });
 
+    await this.cache.del(`${BOTS_CACHE_KEY_PREFIX}${userId}`);
     return {
       ...bot,
       botId: String(bot.botId),
@@ -80,11 +88,23 @@ export class BotsService {
   async findAll(user: User, params: { page?: number; limit?: number; sortBy?: string; sortOrder?: 'asc' | 'desc' }) {
     const page = Math.max(1, params.page ?? 1);
     const limit = Math.min(100, Math.max(1, params.limit ?? 20));
-    const skip = (page - 1) * limit;
-
     const sortBy = params.sortBy ?? 'createdAt';
     const sortOrder = params.sortOrder ?? 'desc';
 
+    const isDefaultQuery = page === 1 && limit === 20 && sortBy === 'createdAt' && sortOrder === 'desc';
+    const cacheKey = `${BOTS_CACHE_KEY_PREFIX}${user.id}`;
+    if (isDefaultQuery) {
+      const cached = await this.cache.get(cacheKey);
+      if (cached) {
+        try {
+          return JSON.parse(cached) as { items: Array<{ id: string; botId: string; [k: string]: unknown }>; total: number };
+        } catch {
+          // invalid cache, fall through
+        }
+      }
+    }
+
+    const skip = (page - 1) * limit;
     const [items, total] = await Promise.all([
       this.prisma.tgBot.findMany({
         where: { userId: user.id },
@@ -108,10 +128,14 @@ export class BotsService {
       this.prisma.tgBot.count({ where: { userId: user.id } }),
     ]);
 
-    return {
+    const result = {
       items: items.map((b) => ({ ...b, botId: String(b.botId) })),
       total,
     };
+    if (isDefaultQuery) {
+      await this.cache.set(cacheKey, JSON.stringify(result), BOTS_CACHE_TTL_SEC);
+    }
+    return result;
   }
 
   async findOne(user: User, botId: string) {
@@ -158,6 +182,7 @@ export class BotsService {
       },
     });
 
+    await this.cache.del(`${BOTS_CACHE_KEY_PREFIX}${user.id}`);
     return { ...updated, botId: String(updated.botId) };
   }
 
@@ -172,5 +197,6 @@ export class BotsService {
     await this.prisma.tgBot.delete({
       where: { botId: id },
     });
+    await this.cache.del(`${BOTS_CACHE_KEY_PREFIX}${user.id}`);
   }
 }

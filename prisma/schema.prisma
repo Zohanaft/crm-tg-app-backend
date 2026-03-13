@@ -10,17 +10,57 @@ datasource db {
   provider = "postgresql"
 }
 
+model Plan {
+  id             Int      @id
+  name           String   @unique
+  maxWorkspaces  Int
+  users          User[]
+
+  @@map("plans")
+}
+
 model User {
-  id         String   @id @default(cuid())
-  telegramId BigInt   @unique
-  firstName  String?
-  lastName   String?
-  username   String?
-  photoUrl   String?
-  authDate   Int?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  bots       TgBot[]
+  id               String   @id @default(cuid())
+  telegramId       BigInt   @unique
+  firstName        String?
+  lastName         String?
+  username         String?
+  photoUrl         String?
+  authDate         Int?
+  planId           Int      @default(1)
+  plan             Plan     @relation(fields: [planId], references: [id])
+  planExpiresAt    DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  bots             TgBot[]
+  ownedWorkspaces  Workspace[]        @relation("WorkspaceOwner")
+  workspaceMembers WorkspaceMember[]
+
+  @@map("users")
+}
+
+model Workspace {
+  id        String   @id @default(cuid())
+  name      String
+  ownerId   String
+  owner     User     @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  ownerName String?
+  members   WorkspaceMember[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("workspaces")
+}
+
+model WorkspaceMember {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@map("workspace_members")
 }
 
 model TgBot {

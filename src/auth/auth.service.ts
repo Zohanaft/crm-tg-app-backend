@@ -51,15 +51,26 @@ export class AuthService {
     const telegramId = BigInt(payload.id);
     let user = await this.prisma.user.findUnique({ where: { telegramId } });
     if (!user) {
-      user = await this.prisma.user.create({
-        data: {
-          telegramId,
-          firstName: payload.first_name ?? null,
-          lastName: payload.last_name ?? null,
-          username: payload.username ?? null,
-          photoUrl: payload.photo_url ?? null,
-          authDate: payload.auth_date ?? null,
-        },
+      user = await this.prisma.$transaction(async (tx) => {
+        const newUser = await tx.user.create({
+          data: {
+            telegramId,
+            firstName: payload.first_name ?? null,
+            lastName: payload.last_name ?? null,
+            username: payload.username ?? null,
+            photoUrl: payload.photo_url ?? null,
+            authDate: payload.auth_date ?? null,
+          },
+        });
+        await tx.workspace.create({
+          data: {
+            name: 'Рабочее пространство',
+            ownerId: newUser.id,
+            ownerName: newUser.username ?? null,
+            members: { create: { userId: newUser.id } },
+          },
+        });
+        return newUser;
       });
     } else {
       user = await this.prisma.user.update({

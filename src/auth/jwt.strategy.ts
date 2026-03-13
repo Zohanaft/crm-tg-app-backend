@@ -34,6 +34,8 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       throw new UnauthorizedException('Invalid token type');
     }
     const user = await this.authService.getProfileById(payload.sub);
-    return user;
+    const effectivePlanId =
+      user.planExpiresAt && user.planExpiresAt < new Date() ? 1 : user.planId;
+    return { ...user, effectivePlanId };
   }
 }
