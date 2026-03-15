@@ -22,27 +22,29 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.use(cookieParser());
 
-  // Prevent caching of Swagger UI and OpenAPI spec (fixes stale doc on production/Cloudflare)
-  app.use((req: { url?: string }, res: { setHeader: (k: string, v: string) => void }, next: () => void) => {
-    if (req.url?.startsWith('/api-doc')) {
-      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-      res.setHeader('Pragma', 'no-cache');
-      res.setHeader('Expires', '0');
-    }
-    next();
-  });
+  const isProduction = process.env.NODE_ENV === 'production';
+  if (!isProduction) {
+    // Swagger только не на проде (development, test и т.д.)
+    app.use((req: { url?: string }, res: { setHeader: (k: string, v: string) => void }, next: () => void) => {
+      if (req.url?.startsWith('/api-doc')) {
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+      }
+      next();
+    });
+    const serverUrl = process.env.API_PUBLIC_URL ?? '/api';
+    const config = new DocumentBuilder()
+      .setTitle('TEST API')
+      .setDescription('The TEST API description')
+      .setVersion('1.0')
+      .addTag('crm')
+      .addServer(serverUrl, serverUrl.startsWith('http') ? 'Production' : 'Current host')
+      .build();
+    const documentFactory = () => SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup('api-doc', app, documentFactory);
+  }
 
-  const serverUrl = process.env.API_PUBLIC_URL ?? '/api';
-  const config = new DocumentBuilder()
-    .setTitle('TEST API')
-    .setDescription('The TEST API description')
-    .setVersion('1.0')
-    .addTag('crm')
-    .addServer(serverUrl, serverUrl.startsWith('http') ? 'Production' : 'Current host')
-    .build();
-  
-  const documentFactory = () => SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api-doc', app, documentFactory);
   const port = Number(process.env.PORT) || 3000;
   const host = process.env.HOST ?? '0.0.0.0';
   try {
