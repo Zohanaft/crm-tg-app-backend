@@ -67,6 +67,7 @@ model TgBot {
   id                      String   @id @default(cuid())
   userId                  String
   user                    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  webhookSecret           String?  @unique
   botId                   BigInt   @unique
   token                   String   @unique
   isBot                   Boolean?
@@ -79,5 +80,6 @@ model TgBot {
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
 
+  @@index([userId])
   @@map("tg_bots")
 }

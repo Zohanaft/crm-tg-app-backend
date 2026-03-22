@@ -13,6 +13,17 @@ import { UpdateWorkspaceDto } from './dto/update-workspace.dto';
 export class WorkspaceController {
   constructor(private readonly workspaceService: WorkspaceService) {}
 
+  @Get('me')
+  @ApiOperation({
+    summary: 'Мои рабочие пространства',
+    description: 'Список workspace текущего пользователя (как владельца).',
+  })
+  @ApiResponse({ status: 200, description: 'Массив рабочих пространств' })
+  @ApiResponse({ status: 401, description: 'Требуется авторизация' })
+  findMine(@CurrentUser() user: User) {
+    return this.workspaceService.findAllByOwnerId(user.id);
+  }
+
   @Get(':ownerId')
   @ApiOperation({
     summary: 'Список пространств по владельцу',

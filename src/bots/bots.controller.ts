@@ -18,7 +18,7 @@ export class BotsController {
     summary: 'Подключить бота',
     description: 'Добавить Telegram-бота по токену из @BotFather. Требуется авторизация.',
   })
-  @ApiBody({ type: CreateBotDto, description: 'Токен бота' })
+  @ApiBody({ type: CreateBotDto, description: 'Токен бота (привязка к текущему пользователю)' })
   @ApiResponse({ status: 201, description: 'Бот успешно подключён' })
   @ApiResponse({ status: 400, description: 'Неверный токен или бот уже подключён' })
   @ApiResponse({ status: 401, description: 'Требуется авторизация' })

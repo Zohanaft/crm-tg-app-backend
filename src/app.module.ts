@@ -12,6 +12,7 @@ import { MessagesModule } from './messages/messages.module';
 import { PgListenModule } from './pg-listen/pg-listen.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { TelegramModule } from './telegram/telegram.module';
+import { TelegramWebhookModule } from './telegram-webhook/telegram-webhook.module';
 import { UsersModule } from './users/users.module';
 import { WorkspaceModule } from './workspace/workspace.module';
 
@@ -30,6 +31,7 @@ import { WorkspaceModule } from './workspace/workspace.module';
     MessagesModule,
     DealsModule,
     TelegramModule,
+    TelegramWebhookModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -1,4 +1,10 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { CacheService } from '../cache/cache.service';
 import type { User } from '../generated/prisma/client';
@@ -19,6 +25,10 @@ interface TelegramGetMeResponse {
   };
 }
 
+function getEnv(name: string): string | undefined {
+  return process.env[name]?.trim() || undefined;
+}
+
 @Injectable()
 export class BotsService {
   constructor(
@@ -36,6 +46,16 @@ export class BotsService {
     return data.result;
   }
 
+  private async telegramApi(token: string, method: string, body?: object): Promise<{ ok: boolean; description?: string }> {
+    const url = `https://api.telegram.org/bot${encodeURIComponent(token)}/${method}`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: body ? JSON.stringify(body) : '{}',
+    });
+    return (await res.json()) as { ok: boolean; description?: string };
+  }
+
   async create(userId: string, token: string) {
     const me = await this.fetchTelegramGetMe(token);
     const botId = BigInt(me.id);
@@ -50,9 +70,20 @@ export class BotsService {
       throw new BadRequestException('Bot is already used by another user');
     }
 
+    const baseUrl = getEnv('TELEGRAM_WEBHOOK_BASE_URL');
+    const skipWebhook = getEnv('TELEGRAM_WEBHOOK_SKIP') === 'true';
+    if (!skipWebhook && !baseUrl) {
+      throw new BadRequestException(
+        'Set TELEGRAM_WEBHOOK_BASE_URL (HTTPS URL of this API, e.g. https://api.example.com) or TELEGRAM_WEBHOOK_SKIP=true for local dev.',
+      );
+    }
+
+    const webhookSecret = randomBytes(32).toString('base64url');
+
     const bot = await this.prisma.tgBot.create({
       data: {
         userId,
+        webhookSecret,
         botId,
         token,
         isBot: me.is_bot ?? null,
@@ -65,18 +96,38 @@ export class BotsService {
       },
       select: {
         id: true,
+        userId: true,
         botId: true,
         firstName: true,
         username: true,
-        isBot: true,
-        canJoinGroups: true,
-        canReadAllGroupMessages: true,
-        supportsInlineQueries: true,
-        rawData: true,
         createdAt: true,
         updatedAt: true,
       },
     });
+
+    if (!skipWebhook && baseUrl) {
+      const cleanBase = baseUrl.replace(/\/$/, '');
+      const webhookUrl = `${cleanBase}/telegram/webhook/${encodeURIComponent(webhookSecret)}`;
+      const wh = await this.telegramApi(token, 'setWebhook', {
+        url: webhookUrl,
+        allowed_updates: ['message', 'callback_query', 'inline_query'],
+      });
+      if (!wh.ok) {
+        await this.prisma.tgBot.delete({ where: { id: bot.id } });
+        throw new BadRequestException(
+          wh.description ?? 'Failed to set Telegram webhook',
+        );
+      }
+    }
+
+    const desc = getEnv('BOT_DEFAULT_DESCRIPTION');
+    const shortDesc = getEnv('BOT_DEFAULT_SHORT_DESCRIPTION');
+    if (desc) {
+      await this.telegramApi(token, 'setMyDescription', { description: desc });
+    }
+    if (shortDesc) {
+      await this.telegramApi(token, 'setMyShortDescription', { short_description: shortDesc });
+    }
 
     await this.cache.del(`${BOTS_CACHE_KEY_PREFIX}${userId}`);
     return {
@@ -85,7 +136,10 @@ export class BotsService {
     };
   }
 
-  async findAll(user: User, params: { page?: number; limit?: number; sortBy?: string; sortOrder?: 'asc' | 'desc' }) {
+  async findAll(
+    user: User,
+    params: { page?: number; limit?: number; sortBy?: string; sortOrder?: 'asc' | 'desc' },
+  ) {
     const page = Math.max(1, params.page ?? 1);
     const limit = Math.min(100, Math.max(1, params.limit ?? 20));
     const sortBy = params.sortBy ?? 'createdAt';
@@ -97,33 +151,34 @@ export class BotsService {
       const cached = await this.cache.get(cacheKey);
       if (cached) {
         try {
-          return JSON.parse(cached) as { items: Array<{ id: string; botId: string; [k: string]: unknown }>; total: number };
+          return JSON.parse(cached) as {
+            items: Array<Record<string, unknown>>;
+            total: number;
+          };
         } catch {
-          // invalid cache, fall through
+          // fall through
         }
       }
     }
 
     const skip = (page - 1) * limit;
+    const select = {
+      id: true,
+      userId: true,
+      botId: true,
+      firstName: true,
+      username: true,
+      createdAt: true,
+      updatedAt: true,
+    } as const;
+
     const [items, total] = await Promise.all([
       this.prisma.tgBot.findMany({
         where: { userId: user.id },
         orderBy: { [sortBy]: sortOrder },
         skip,
         take: limit,
-        select: {
-          id: true,
-          botId: true,
-          firstName: true,
-          username: true,
-          isBot: true,
-          canJoinGroups: true,
-          canReadAllGroupMessages: true,
-          supportsInlineQueries: true,
-          rawData: true,
-          createdAt: true,
-          updatedAt: true,
-        },
+        select,
       }),
       this.prisma.tgBot.count({ where: { userId: user.id } }),
     ]);
@@ -140,10 +195,19 @@ export class BotsService {
 
   async findOne(user: User, botId: string) {
     const id = BigInt(botId);
-    const bot = await this.prisma.tgBot.findUnique({
-      where: { botId: id },
+    const bot = await this.prisma.tgBot.findFirst({
+      where: { botId: id, userId: user.id },
+      select: {
+        id: true,
+        userId: true,
+        botId: true,
+        firstName: true,
+        username: true,
+        createdAt: true,
+        updatedAt: true,
+      },
     });
-    if (!bot || bot.userId !== user.id) {
+    if (!bot) {
       throw new NotFoundException('Bot not found');
     }
     return {
@@ -169,14 +233,10 @@ export class BotsService {
       },
       select: {
         id: true,
+        userId: true,
         botId: true,
         firstName: true,
         username: true,
-        isBot: true,
-        canJoinGroups: true,
-        canReadAllGroupMessages: true,
-        supportsInlineQueries: true,
-        rawData: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -193,6 +253,10 @@ export class BotsService {
     });
     if (!bot || bot.userId !== user.id) {
       throw new ForbiddenException('Bot not found');
+    }
+    const skipWebhook = getEnv('TELEGRAM_WEBHOOK_SKIP') === 'true';
+    if (!skipWebhook && bot.token) {
+      await this.telegramApi(bot.token, 'deleteWebhook', { drop_pending_updates: false });
     }
     await this.prisma.tgBot.delete({
       where: { botId: id },
