@@ -1,4 +1,8 @@
-import { ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  ExecutionContext,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import type { Request } from 'express';
 
@@ -6,7 +10,9 @@ import type { Request } from 'express';
 export class JwtAuthGuard extends AuthGuard('jwt') {
   canActivate(context: ExecutionContext) {
     const req = context.switchToHttp().getRequest<Request>();
-    const token = req?.cookies?.access_token ?? req?.headers?.authorization?.replace(/^Bearer\s+/i, '');
+    const token =
+      req?.cookies?.access_token ??
+      req?.headers?.authorization?.replace(/^Bearer\s+/i, '');
     if (!token) {
       throw new UnauthorizedException('Access token required');
     }

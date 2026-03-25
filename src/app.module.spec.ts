@@ -52,7 +52,9 @@ describe('AppModule', () => {
   it('должен включать все фичевые модули в imports', () => {
     const imports = Reflect.getMetadata('imports', AppModule) as unknown[];
     expect(imports).toBeDefined();
-    expect(imports).toEqual(expect.arrayContaining([...expectedImportedModules]));
+    expect(imports).toEqual(
+      expect.arrayContaining([...expectedImportedModules]),
+    );
     expect(imports).toHaveLength(expectedImportedModules.length);
   });
 

@@ -1,5 +1,9 @@
 import * as crypto from 'node:crypto';
-import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -41,7 +45,10 @@ export class AuthService {
       .update(dataCheckString)
       .digest('hex');
     if (expectedHash !== hash) return false;
-    if (Math.floor(Date.now() / 1000) - payload.auth_date > AUTH_DATE_MAX_AGE_SEC) {
+    if (
+      Math.floor(Date.now() / 1000) - payload.auth_date >
+      AUTH_DATE_MAX_AGE_SEC
+    ) {
       return false;
     }
     return true;
@@ -93,7 +100,8 @@ export class AuthService {
     }
     const user = await this.findOrCreateUser(payload);
     const accessExpiresSec = Number(process.env.JWT_ACCESS_EXPIRES) || 15 * 60;
-    const refreshExpiresSec = Number(process.env.JWT_REFRESH_EXPIRES) || 7 * 24 * 60 * 60;
+    const refreshExpiresSec =
+      Number(process.env.JWT_REFRESH_EXPIRES) || 7 * 24 * 60 * 60;
     const accessToken = this.jwtService.sign(
       { sub: user.id, telegramId: String(user.telegramId), type: 'access' },
       { expiresIn: accessExpiresSec },
@@ -132,7 +140,12 @@ export class AuthService {
       }
       return user;
     } catch (err: unknown) {
-      if (err && typeof err === 'object' && 'name' in err && (err as { name: string }).name === 'TokenExpiredError') {
+      if (
+        err &&
+        typeof err === 'object' &&
+        'name' in err &&
+        (err as { name: string }).name === 'TokenExpiredError'
+      ) {
         throw new UnauthorizedException('Access token expired');
       }
       throw new UnauthorizedException('Invalid access token');
@@ -148,8 +161,10 @@ export class AuthService {
       if (payload.type !== 'refresh') {
         throw new UnauthorizedException('Invalid token type');
       }
-      const accessExpiresSec = Number(process.env.JWT_ACCESS_EXPIRES) || 15 * 60;
-      const refreshExpiresSec = Number(process.env.JWT_REFRESH_EXPIRES) || 7 * 24 * 60 * 60;
+      const accessExpiresSec =
+        Number(process.env.JWT_ACCESS_EXPIRES) || 15 * 60;
+      const refreshExpiresSec =
+        Number(process.env.JWT_REFRESH_EXPIRES) || 7 * 24 * 60 * 60;
       const accessToken = this.jwtService.sign(
         { sub: payload.sub, telegramId: payload.telegramId, type: 'access' },
         { expiresIn: accessExpiresSec },
@@ -160,7 +175,12 @@ export class AuthService {
       );
       return { accessToken, refreshToken: newRefreshToken };
     } catch (err: unknown) {
-      if (err && typeof err === 'object' && 'name' in err && (err as { name: string }).name === 'TokenExpiredError') {
+      if (
+        err &&
+        typeof err === 'object' &&
+        'name' in err &&
+        (err as { name: string }).name === 'TokenExpiredError'
+      ) {
         throw new BadRequestException('Сессия истекла');
       }
       throw new UnauthorizedException('Invalid refresh token');

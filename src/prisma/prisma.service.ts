@@ -17,7 +17,10 @@ function getConnectionString(): string {
 }
 
 @Injectable()
-export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
+export class PrismaService
+  extends PrismaClient
+  implements OnModuleInit, OnModuleDestroy
+{
   constructor() {
     const adapter = new PrismaPg({ connectionString: getConnectionString() });
     super({ adapter });

@@ -35,6 +35,7 @@ model User {
   bots             TgBot[]
   ownedWorkspaces  Workspace[]        @relation("WorkspaceOwner")
   workspaceMembers WorkspaceMember[]
+  clientOwners     ClientOwner[]
 
   @@map("users")
 }
@@ -45,6 +46,8 @@ model Workspace {
   ownerId   String
   owner     User     @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   ownerName String?
+  countryCc String   @default("ru")
+  countryCode String @default("RU")
   members   WorkspaceMember[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -82,4 +85,34 @@ model TgBot {
 
   @@index([userId])
   @@map("tg_bots")
+}
+
+model Client {
+  id         String        @id @default(cuid())
+  telegramId BigInt        @unique
+  isBot      Boolean       @default(false)
+  firstName  String
+  lastName   String?
+  username   String?
+  chatId     BigInt?
+  chatType   String?
+  owners     ClientOwner[]
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  @@map("clients")
+}
+
+model ClientOwner {
+  id        String   @id @default(cuid())
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  ownerId   String
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([clientId, ownerId])
+  @@index([ownerId])
+  @@index([clientId])
+  @@map("client_owner_links")
 }

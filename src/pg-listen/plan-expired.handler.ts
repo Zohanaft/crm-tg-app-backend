@@ -1,6 +1,10 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { PgListenService, PLAN_EXPIRED_CHANNEL, type PlanExpiredPayload } from './pg-listen.service';
+import {
+  PgListenService,
+  PLAN_EXPIRED_CHANNEL,
+  type PlanExpiredPayload,
+} from './pg-listen.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()

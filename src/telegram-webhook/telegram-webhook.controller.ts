@@ -1,5 +1,12 @@
-import { Body, Controller, HttpCode, HttpStatus, Param, Post } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import {
+  Body,
+  Controller,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Post,
+} from '@nestjs/common';
+import { TelegramWebhookService } from './telegram-webhook.service';
 
 /**
  * Публичный endpoint для Telegram setWebhook.
@@ -7,18 +14,16 @@ import { PrismaService } from '../prisma/prisma.service';
  */
 @Controller('telegram/webhook')
 export class TelegramWebhookController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly telegramWebhookService: TelegramWebhookService,
+  ) {}
 
   @Post(':secret')
   @HttpCode(HttpStatus.OK)
-  async handle(@Param('secret') secret: string, @Body() _body: unknown) {
-    const bot = await this.prisma.tgBot.findFirst({
-      where: { webhookSecret: secret },
-      select: { id: true },
-    });
-    if (bot) {
-      // TODO: обработка update (messages, callback_query и т.д.)
-    }
-    return { ok: true };
+  async handle(@Param('secret') secret: string, @Body() body: unknown) {
+    return this.telegramWebhookService.handle(
+      secret,
+      body as Parameters<TelegramWebhookService['handle']>[1],
+    );
   }
 }

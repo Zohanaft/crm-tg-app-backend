@@ -10,9 +10,14 @@ export class AppController {
   @Get('health')
   @ApiOperation({
     summary: 'Проверка состояния',
-    description: 'Проверка работы приложения и подключения к PostgreSQL. Используется для healthcheck.',
+    description:
+      'Проверка работы приложения и подключения к PostgreSQL. Используется для healthcheck.',
   })
-  @ApiResponse({ status: 200, description: 'Приложение работает, в теле возвращается статус БД (ok/error)' })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Приложение работает, в теле возвращается статус БД (ok/error)',
+  })
   async health() {
     const database = await this.appService.checkDatabase();
     return {

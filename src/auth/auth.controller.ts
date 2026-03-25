@@ -1,18 +1,40 @@
-import { BadRequestException, Body, Controller, Get, Post, Query, Req, Res, UnauthorizedException } from '@nestjs/common';
-import { ApiBody, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Post,
+  Query,
+  Req,
+  Res,
+  UnauthorizedException,
+} from '@nestjs/common';
+import {
+  ApiBody,
+  ApiOperation,
+  ApiQuery,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import type { TelegramAuthPayload } from './auth.service';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 
-function parseTgAuthResult(tgAuthResult: string | undefined): TelegramAuthPayload {
+function parseTgAuthResult(
+  tgAuthResult: string | undefined,
+): TelegramAuthPayload {
   if (!tgAuthResult || typeof tgAuthResult !== 'string') {
     throw new BadRequestException('tgAuthResult is required');
   }
   try {
     const json = Buffer.from(tgAuthResult, 'base64').toString('utf8');
     const payload = JSON.parse(json) as TelegramAuthPayload;
-    if (typeof payload?.id !== 'number' || typeof payload?.auth_date !== 'number' || typeof payload?.hash !== 'string') {
+    if (
+      typeof payload?.id !== 'number' ||
+      typeof payload?.auth_date !== 'number' ||
+      typeof payload?.hash !== 'string'
+    ) {
       throw new BadRequestException('Invalid tgAuthResult payload');
     }
     return payload;
@@ -34,10 +56,15 @@ export class AuthController {
   @Post('login')
   @ApiOperation({
     summary: 'Вход через Telegram',
-    description: 'Авторизация по данным виджета Telegram. Устанавливает cookies с access и refresh токенами.',
+    description:
+      'Авторизация по данным виджета Telegram. Устанавливает cookies с access и refresh токенами.',
   })
   @ApiBody({ type: LoginDto, description: 'Данные от Telegram Login Widget' })
-  @ApiResponse({ status: 200, description: 'Успешный вход, возвращается пользователь и устанавливаются cookies' })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Успешный вход, возвращается пользователь и устанавливаются cookies',
+  })
   @ApiResponse({ status: 401, description: 'Неверные данные Telegram' })
   async login(
     @Body() body: TelegramAuthPayload,
@@ -71,7 +98,8 @@ export class AuthController {
   @Get('auth/telegram')
   @ApiOperation({
     summary: 'OAuth-колбэк Telegram',
-    description: 'Редирект после авторизации в Telegram. Устанавливает cookies и перенаправляет на дашборд.',
+    description:
+      'Редирект после авторизации в Telegram. Устанавливает cookies и перенаправляет на дашборд.',
   })
   @ApiQuery({
     name: 'tgAuthResult',
@@ -79,7 +107,10 @@ export class AuthController {
     description: 'Данные авторизации Telegram в Base64 (JSON)',
   })
   @ApiResponse({ status: 302, description: 'Редирект на дашборд' })
-  @ApiResponse({ status: 400, description: 'Неверный или отсутствующий tgAuthResult' })
+  @ApiResponse({
+    status: 400,
+    description: 'Неверный или отсутствующий tgAuthResult',
+  })
   @ApiResponse({ status: 401, description: 'Ошибка авторизации Telegram' })
   async authTelegram(
     @Query('tgAuthResult') tgAuthResult: string | undefined,
@@ -111,11 +142,18 @@ export class AuthController {
   @Get('profile')
   @ApiOperation({
     summary: 'Профиль текущего пользователя',
-    description: 'Возвращает данные пользователя. Требуется access_token в cookie или заголовке Authorization.',
+    description:
+      'Возвращает данные пользователя. Требуется access_token в cookie или заголовке Authorization.',
   })
-  @ApiResponse({ status: 200, description: 'Профиль пользователя (id, telegramId, имя, юзернейм, фото)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Профиль пользователя (id, telegramId, имя, юзернейм, фото)',
+  })
   @ApiResponse({ status: 401, description: 'Требуется авторизация' })
-  async profile(@Req() req: Request, @Res({ passthrough: false }) res: Response) {
+  async profile(
+    @Req() req: Request,
+    @Res({ passthrough: false }) res: Response,
+  ) {
     const accessToken = req.cookies?.access_token;
     const user = await this.authService.getProfileFromAccessToken(accessToken);
     res.json({
@@ -131,11 +169,21 @@ export class AuthController {
   @Post('refresh')
   @ApiOperation({
     summary: 'Обновить токены',
-    description: 'Выдать новые access и refresh токены. Используется refresh_token из cookie.',
+    description:
+      'Выдать новые access и refresh токены. Используется refresh_token из cookie.',
   })
-  @ApiResponse({ status: 200, description: 'Новые токены в теле ответа и в Set-Cookie' })
-  @ApiResponse({ status: 401, description: 'Неверный или истёкший refresh token' })
-  async refresh(@Req() req: Request, @Res({ passthrough: false }) res: Response) {
+  @ApiResponse({
+    status: 200,
+    description: 'Новые токены в теле ответа и в Set-Cookie',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Неверный или истёкший refresh token',
+  })
+  async refresh(
+    @Req() req: Request,
+    @Res({ passthrough: false }) res: Response,
+  ) {
     const refreshToken = req.cookies?.refresh_token;
     const { accessToken, refreshToken: newRefreshToken } =
       this.authService.refresh(refreshToken);

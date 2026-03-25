@@ -29,6 +29,36 @@ function getEnv(name: string): string | undefined {
   return process.env[name]?.trim() || undefined;
 }
 
+function normalizeWebhookBaseUrl(raw: string): string {
+  const clean = raw.replace(/\/$/, '');
+  if (clean.endsWith('/api/wss')) {
+    return clean.slice(0, -'/api/wss'.length);
+  }
+  return clean;
+}
+
+/** Telegram requires HTTPS for public webhooks; upgrade when proxy sent http:// for a real domain */
+function ensureHttpsWebhookBaseForTelegram(raw: string): string {
+  const clean = normalizeWebhookBaseUrl(raw);
+  try {
+    const u = new URL(clean);
+    const host = u.hostname.toLowerCase();
+    const isLocal =
+      host === 'localhost' ||
+      host === '127.0.0.1' ||
+      host === '::1' ||
+      host.endsWith('.local');
+    const isPublicDomain = host.includes('.') && !isLocal;
+    if (u.protocol === 'http:' && isPublicDomain) {
+      u.protocol = 'https:';
+      return u.href.replace(/\/$/, '');
+    }
+    return clean;
+  } catch {
+    return clean;
+  }
+}
+
 @Injectable()
 export class BotsService {
   constructor(
@@ -36,7 +66,9 @@ export class BotsService {
     private readonly cache: CacheService,
   ) {}
 
-  private async fetchTelegramGetMe(token: string): Promise<NonNullable<TelegramGetMeResponse['result']>> {
+  private async fetchTelegramGetMe(
+    token: string,
+  ): Promise<NonNullable<TelegramGetMeResponse['result']>> {
     const url = `https://api.telegram.org/bot${encodeURIComponent(token)}/getMe`;
     const res = await fetch(url);
     const data = (await res.json()) as TelegramGetMeResponse;
@@ -46,7 +78,11 @@ export class BotsService {
     return data.result;
   }
 
-  private async telegramApi(token: string, method: string, body?: object): Promise<{ ok: boolean; description?: string }> {
+  private async telegramApi(
+    token: string,
+    method: string,
+    body?: object,
+  ): Promise<{ ok: boolean; description?: string }> {
     const url = `https://api.telegram.org/bot${encodeURIComponent(token)}/${method}`;
     const res = await fetch(url, {
       method: 'POST',
@@ -56,7 +92,7 @@ export class BotsService {
     return (await res.json()) as { ok: boolean; description?: string };
   }
 
-  async create(userId: string, token: string) {
+  async create(userId: string, token: string, requestBaseUrl?: string) {
     const me = await this.fetchTelegramGetMe(token);
     const botId = BigInt(me.id);
 
@@ -70,11 +106,11 @@ export class BotsService {
       throw new BadRequestException('Bot is already used by another user');
     }
 
-    const baseUrl = getEnv('TELEGRAM_WEBHOOK_BASE_URL');
+    const baseUrl = requestBaseUrl ?? getEnv('TELEGRAM_WEBHOOK_BASE_URL');
     const skipWebhook = getEnv('TELEGRAM_WEBHOOK_SKIP') === 'true';
     if (!skipWebhook && !baseUrl) {
       throw new BadRequestException(
-        'Set TELEGRAM_WEBHOOK_BASE_URL (HTTPS URL of this API, e.g. https://api.example.com) or TELEGRAM_WEBHOOK_SKIP=true for local dev.',
+        'Cannot detect public HTTPS domain from request. Set TELEGRAM_WEBHOOK_BASE_URL (e.g. https://api.example.com or https://api.example.com/api/wss) or TELEGRAM_WEBHOOK_SKIP=true for local dev.',
       );
     }
 
@@ -106,8 +142,15 @@ export class BotsService {
     });
 
     if (!skipWebhook && baseUrl) {
-      const cleanBase = baseUrl.replace(/\/$/, '');
-      const webhookUrl = `${cleanBase}/telegram/webhook/${encodeURIComponent(webhookSecret)}`;
+      const cleanBase = ensureHttpsWebhookBaseForTelegram(baseUrl);
+      if (!/^https:\/\//i.test(cleanBase)) {
+        await this.prisma.tgBot.delete({ where: { id: bot.id } });
+        throw new BadRequestException(
+          'Webhook URL must use https:// for Telegram (public domain). For local dev set TELEGRAM_WEBHOOK_SKIP=true, or set TELEGRAM_WEBHOOK_BASE_URL explicitly (e.g. https://zohanafttcrm.com or https://zohanafttcrm.com/api/wss).',
+        );
+      }
+      const webhookPath = '/api/wss/telegram/webhook';
+      const webhookUrl = `${cleanBase}${webhookPath}/${encodeURIComponent(webhookSecret)}`;
       const wh = await this.telegramApi(token, 'setWebhook', {
         url: webhookUrl,
         allowed_updates: ['message', 'callback_query', 'inline_query'],
@@ -126,7 +169,9 @@ export class BotsService {
       await this.telegramApi(token, 'setMyDescription', { description: desc });
     }
     if (shortDesc) {
-      await this.telegramApi(token, 'setMyShortDescription', { short_description: shortDesc });
+      await this.telegramApi(token, 'setMyShortDescription', {
+        short_description: shortDesc,
+      });
     }
 
     await this.cache.del(`${BOTS_CACHE_KEY_PREFIX}${userId}`);
@@ -138,14 +183,23 @@ export class BotsService {
 
   async findAll(
     user: User,
-    params: { page?: number; limit?: number; sortBy?: string; sortOrder?: 'asc' | 'desc' },
+    params: {
+      page?: number;
+      limit?: number;
+      sortBy?: string;
+      sortOrder?: 'asc' | 'desc';
+    },
   ) {
     const page = Math.max(1, params.page ?? 1);
     const limit = Math.min(100, Math.max(1, params.limit ?? 20));
     const sortBy = params.sortBy ?? 'createdAt';
     const sortOrder = params.sortOrder ?? 'desc';
 
-    const isDefaultQuery = page === 1 && limit === 20 && sortBy === 'createdAt' && sortOrder === 'desc';
+    const isDefaultQuery =
+      page === 1 &&
+      limit === 20 &&
+      sortBy === 'createdAt' &&
+      sortOrder === 'desc';
     const cacheKey = `${BOTS_CACHE_KEY_PREFIX}${user.id}`;
     if (isDefaultQuery) {
       const cached = await this.cache.get(cacheKey);
@@ -188,7 +242,11 @@ export class BotsService {
       total,
     };
     if (isDefaultQuery) {
-      await this.cache.set(cacheKey, JSON.stringify(result), BOTS_CACHE_TTL_SEC);
+      await this.cache.set(
+        cacheKey,
+        JSON.stringify(result),
+        BOTS_CACHE_TTL_SEC,
+      );
     }
     return result;
   }
@@ -216,7 +274,11 @@ export class BotsService {
     };
   }
 
-  async update(user: User, botId: string, dto: { firstName?: string; username?: string }) {
+  async update(
+    user: User,
+    botId: string,
+    dto: { firstName?: string; username?: string },
+  ) {
     const id = BigInt(botId);
     const bot = await this.prisma.tgBot.findUnique({
       where: { botId: id },
@@ -256,7 +318,9 @@ export class BotsService {
     }
     const skipWebhook = getEnv('TELEGRAM_WEBHOOK_SKIP') === 'true';
     if (!skipWebhook && bot.token) {
-      await this.telegramApi(bot.token, 'deleteWebhook', { drop_pending_updates: false });
+      await this.telegramApi(bot.token, 'deleteWebhook', {
+        drop_pending_updates: false,
+      });
     }
     await this.prisma.tgBot.delete({
       where: { botId: id },

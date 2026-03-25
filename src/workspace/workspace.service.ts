@@ -1,4 +1,9 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CacheService } from '../cache/cache.service';
 
@@ -25,15 +30,50 @@ export class WorkspaceService {
     const cached = await this.cache.get(cacheKey);
     if (cached) {
       try {
-        return JSON.parse(cached) as Awaited<ReturnType<WorkspaceService['loadWorkspacesByOwnerId']>>;
+        return JSON.parse(cached) as Awaited<
+          ReturnType<WorkspaceService['loadWorkspacesByOwnerId']>
+        >;
       } catch {
         // invalid cache, fall through to DB
       }
     }
 
     const list = await this.loadWorkspacesByOwnerId(ownerId);
-    await this.cache.set(cacheKey, JSON.stringify(list), WORKSPACES_CACHE_TTL_SEC);
+    await this.cache.set(
+      cacheKey,
+      JSON.stringify(list),
+      WORKSPACES_CACHE_TTL_SEC,
+    );
     return list;
+  }
+
+  async findAccessibleByUserId(userId: string) {
+    // `members` includes workspace_members records; in theory owner is also a member
+    // (created in AuthService), but we keep `ownerId` as a fallback.
+    return this.prisma.workspace.findMany({
+      where: {
+        OR: [{ ownerId: userId }, { members: { some: { userId } } }],
+      },
+      select: {
+        id: true,
+        name: true,
+        ownerId: true,
+        ownerName: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  async findMembershipsByUserId(userId: string) {
+    const memberships = await this.prisma.workspaceMember.findMany({
+      where: { userId },
+      select: {
+        workspaceId: true,
+      },
+    });
+    return memberships.map((membership) => membership.workspaceId);
   }
 
   private async loadWorkspacesByOwnerId(ownerId: string) {
@@ -98,7 +138,7 @@ export class WorkspaceService {
     return workspace;
   }
 
-  async update(workspaceId: string, userId: string, name?: string | undefined) {
+  async update(workspaceId: string, userId: string, name?: string) {
     const workspace = await this.prisma.workspace.findUnique({
       where: { id: workspaceId },
       select: {
