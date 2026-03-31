@@ -15,16 +15,20 @@ import { TelegramModule } from './telegram/telegram.module';
 import { TelegramWebhookModule } from './telegram-webhook/telegram-webhook.module';
 import { UsersModule } from './users/users.module';
 import { WorkspaceModule } from './workspace/workspace.module';
+import { WssInternalModule } from './wss-internal/wss-internal.module';
+import { ActionsModule } from './actions/actions.module';
 
 @Module({
   imports: [
     EventEmitterModule.forRoot(),
     CacheModule,
     PrismaModule,
+    WssInternalModule,
     AuthModule,
     UsersModule,
     BotsModule,
     WorkspaceModule,
+    ActionsModule,
     PgListenModule,
     ClientsModule,
     ChatsModule,

@@ -24,6 +24,7 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { WorkspaceService } from './workspace.service';
 import { CreateWorkspaceDto } from './dto/create-workspace.dto';
 import { UpdateWorkspaceDto } from './dto/update-workspace.dto';
+import { CreateWorkspaceInviteDto } from './dto/create-workspace-invite.dto';
 
 @ApiTags('Рабочие пространства')
 @Controller('workspace')
@@ -58,6 +59,42 @@ export class WorkspaceController {
       userId: user.id,
       workspaceIds,
     };
+  }
+
+  @Get('invites/me')
+  @ApiOperation({ summary: 'Мои ожидающие приглашения в workspace' })
+  @ApiResponse({ status: 200 })
+  myPendingInvites(@CurrentUser() user: User) {
+    return this.workspaceService.listPendingInvitesForUser(user.id);
+  }
+
+  @Post('invites/:inviteId/accept')
+  @ApiOperation({ summary: 'Принять приглашение в workspace' })
+  @ApiParam({ name: 'inviteId', description: 'ID приглашения' })
+  @ApiResponse({ status: 200 })
+  @ApiResponse({ status: 404 })
+  acceptInvite(
+    @CurrentUser() user: User,
+    @Param('inviteId') inviteId: string,
+  ) {
+    return this.workspaceService.acceptInvite(inviteId, user.id);
+  }
+
+  @Post(':workspaceId/invites')
+  @ApiOperation({ summary: 'Пригласить пользователя в workspace' })
+  @ApiParam({ name: 'workspaceId', description: 'ID рабочего пространства' })
+  @ApiBody({ type: CreateWorkspaceInviteDto })
+  @ApiResponse({ status: 201 })
+  createInvite(
+    @CurrentUser() user: User,
+    @Param('workspaceId') workspaceId: string,
+    @Body() dto: CreateWorkspaceInviteDto,
+  ) {
+    return this.workspaceService.createInvite(
+      workspaceId,
+      user.id,
+      dto.invitedUserId,
+    );
   }
 
   @Get(':ownerId')

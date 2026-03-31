@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { ClientsService } from '../clients/clients.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { ActionsService } from '../actions/actions.service';
+import { WssInternalService } from '../wss-internal/wss-internal.service';
 
 interface TelegramWebhookUpdate {
   message?: {
@@ -24,6 +26,8 @@ export class TelegramWebhookService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly clientsService: ClientsService,
+    private readonly actionsService: ActionsService,
+    private readonly wssInternal: WssInternalService,
   ) {}
 
   async handle(secret: string, body: TelegramWebhookUpdate) {
@@ -57,39 +61,23 @@ export class TelegramWebhookService {
       chat: body?.message?.chat,
     });
 
-    await this.publishClientStartEvent(saved);
-    return { ok: true };
-  }
+    await this.wssInternal.publishClientStart(saved);
 
-  private async publishClientStartEvent(payload: {
-    ownerId: string;
-    workspaceIds: string[];
-    client: {
-      telegramId: string;
-      isBot: boolean;
-      firstName: string;
-      lastName: string | null;
-      username: string | null;
-      chatId: string | null;
-      chatType: string | null;
-    };
-  }) {
-    const baseUrl = process.env['WSS_INTERNAL_URL']?.replace(/\/$/, '');
-    const sharedSecret = process.env['WSS_SHARED_SECRET'] ?? '';
-    if (!baseUrl) {
-      return;
+    const title = `Новый клиент: ${saved.client.firstName}${
+      saved.client.username ? ` @${saved.client.username}` : ''
+    }`;
+    for (const workspaceId of saved.workspaceIds) {
+      void this.actionsService
+        .createAndBroadcast({
+          workspaceId,
+          type: 'NEW_CLIENT',
+          title,
+          meta: { client: saved.client, ownerId: saved.ownerId },
+          actorUserId: saved.ownerId,
+          broadcastWorkspaceIds: [workspaceId],
+        })
+        .catch(() => {});
     }
-    try {
-      await fetch(`${baseUrl}/internal/events/client-start`, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          ...(sharedSecret ? { 'x-wss-shared-secret': sharedSecret } : {}),
-        },
-        body: JSON.stringify(payload),
-      });
-    } catch {
-      // Best effort bridge: webhook should stay idempotent and fast.
-    }
+    return { ok: true };
   }
 }

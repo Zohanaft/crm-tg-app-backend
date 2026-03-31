@@ -36,6 +36,10 @@ model User {
   ownedWorkspaces  Workspace[]        @relation("WorkspaceOwner")
   workspaceMembers WorkspaceMember[]
   clientOwners     ClientOwner[]
+  invitesCreated   WorkspaceInvite[] @relation("InviteInviter")
+  invitesReceived  WorkspaceInvite[] @relation("InviteInvitee")
+  actionsAsActor   Action[]          @relation("ActionActor")
+  actionsAsRecipient Action[]        @relation("ActionRecipient")
 
   @@map("users")
 }
@@ -49,10 +53,53 @@ model Workspace {
   countryCc String   @default("ru")
   countryCode String @default("RU")
   members   WorkspaceMember[]
+  invites   WorkspaceInvite[]
+  actions   Action[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@map("workspaces")
+}
+
+enum WorkspaceInviteStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
+model WorkspaceInvite {
+  id               String                @id @default(cuid())
+  workspaceId      String
+  workspace        Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  invitedByUserId  String
+  invitedBy        User                  @relation("InviteInviter", fields: [invitedByUserId], references: [id], onDelete: Cascade)
+  invitedUserId    String
+  invitedUser      User                  @relation("InviteInvitee", fields: [invitedUserId], references: [id], onDelete: Cascade)
+  status           WorkspaceInviteStatus @default(PENDING)
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  @@index([invitedUserId, status])
+  @@index([workspaceId, status])
+  @@map("workspace_invites")
+}
+
+model Action {
+  id               String    @id @default(cuid())
+  workspaceId      String
+  workspace        Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  type             String
+  title            String
+  meta             Json?
+  actorUserId      String?
+  actor            User?     @relation("ActionActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  recipientUserId  String?
+  recipient        User?     @relation("ActionRecipient", fields: [recipientUserId], references: [id], onDelete: Cascade)
+  createdAt        DateTime  @default(now())
+
+  @@index([workspaceId, createdAt])
+  @@index([recipientUserId])
+  @@map("actions")
 }
 
 model WorkspaceMember {

@@ -6,6 +6,9 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CacheService } from '../cache/cache.service';
+import { ActionsService } from '../actions/actions.service';
+import { WssInternalService } from '../wss-internal/wss-internal.service';
+import { WorkspaceInviteStatus } from '../generated/prisma/client';
 
 const WORKSPACES_CACHE_KEY_PREFIX = 'workspaces:';
 const WORKSPACES_CACHE_TTL_SEC = 300;
@@ -15,6 +18,8 @@ export class WorkspaceService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly cache: CacheService,
+    private readonly actionsService: ActionsService,
+    private readonly wssInternal: WssInternalService,
   ) {}
 
   /** Effective plan ID: 1 (free) if plan expired, else user's planId */
@@ -173,6 +178,194 @@ export class WorkspaceService {
     });
     await this.cache.del(`${WORKSPACES_CACHE_KEY_PREFIX}${userId}`);
     return updated;
+  }
+
+  private async assertWorkspaceMember(workspaceId: string, userId: string) {
+    const row = await this.prisma.workspaceMember.findFirst({
+      where: { workspaceId, userId },
+      select: { id: true },
+    });
+    if (!row) {
+      throw new ForbiddenException('Access denied');
+    }
+  }
+
+  async createInvite(
+    workspaceId: string,
+    inviterId: string,
+    inviteeUserId: string,
+  ) {
+    if (!inviteeUserId?.trim()) {
+      throw new BadRequestException('invitedUserId is required');
+    }
+
+    if (inviterId === inviteeUserId) {
+      throw new BadRequestException('Cannot invite yourself');
+    }
+
+    await this.assertWorkspaceMember(workspaceId, inviterId);
+
+    const workspace = await this.prisma.workspace.findUnique({
+      where: { id: workspaceId },
+      select: { id: true, name: true },
+    });
+    if (!workspace) {
+      throw new NotFoundException('Workspace not found');
+    }
+
+    const alreadyMember = await this.prisma.workspaceMember.findFirst({
+      where: { workspaceId, userId: inviteeUserId },
+      select: { id: true },
+    });
+    if (alreadyMember) {
+      throw new BadRequestException('User is already a member');
+    }
+
+    const pending = await this.prisma.workspaceInvite.findFirst({
+      where: {
+        workspaceId,
+        invitedUserId: inviteeUserId,
+        status: WorkspaceInviteStatus.PENDING,
+      },
+      select: { id: true },
+    });
+    if (pending) {
+      throw new BadRequestException('Invite already pending');
+    }
+
+    const invite = await this.prisma.workspaceInvite.create({
+      data: {
+        workspaceId,
+        invitedByUserId: inviterId,
+        invitedUserId: inviteeUserId,
+        status: WorkspaceInviteStatus.PENDING,
+      },
+      select: {
+        id: true,
+        workspaceId: true,
+        invitedByUserId: true,
+        invitedUserId: true,
+        status: true,
+        createdAt: true,
+      },
+    });
+
+    const inviter = await this.prisma.user.findUnique({
+      where: { id: inviterId },
+      select: { username: true, firstName: true },
+    });
+    const inviterLabel =
+      inviter?.firstName ?? inviter?.username ?? 'Участник';
+
+    await this.actionsService.createAndBroadcast({
+      workspaceId,
+      type: 'WORKSPACE_INVITE',
+      title: `Приглашение в «${workspace.name}» от ${inviterLabel}`,
+      meta: { inviteId: invite.id, workspaceName: workspace.name },
+      actorUserId: inviterId,
+      recipientUserId: inviteeUserId,
+      broadcast: false,
+    });
+
+    return invite;
+  }
+
+  async listPendingInvitesForUser(userId: string) {
+    return this.prisma.workspaceInvite.findMany({
+      where: {
+        invitedUserId: userId,
+        status: WorkspaceInviteStatus.PENDING,
+      },
+      select: {
+        id: true,
+        workspaceId: true,
+        invitedByUserId: true,
+        createdAt: true,
+        workspace: {
+          select: { id: true, name: true, ownerId: true },
+        },
+        invitedBy: {
+          select: {
+            id: true,
+            username: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async acceptInvite(inviteId: string, userId: string) {
+    const invite = await this.prisma.workspaceInvite.findFirst({
+      where: {
+        id: inviteId,
+        invitedUserId: userId,
+        status: WorkspaceInviteStatus.PENDING,
+      },
+      include: {
+        workspace: { select: { id: true, name: true, ownerId: true } },
+      },
+    });
+    if (!invite) {
+      throw new NotFoundException('Invite not found');
+    }
+
+    await this.prisma.workspaceMember.create({
+      data: {
+        workspaceId: invite.workspaceId,
+        userId,
+      },
+    });
+
+    await this.prisma.workspaceInvite.update({
+      where: { id: inviteId },
+      data: { status: WorkspaceInviteStatus.ACCEPTED },
+    });
+
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: {
+        id: true,
+        username: true,
+        firstName: true,
+        lastName: true,
+      },
+    });
+
+    const display =
+      [user.firstName, user.lastName].filter(Boolean).join(' ').trim() ||
+      user.username ||
+      'Новый участник';
+
+    await this.actionsService.createAndBroadcast({
+      workspaceId: invite.workspaceId,
+      type: 'WORKSPACE_MEMBER_JOINED',
+      title: `${display} присоединился к «${invite.workspace.name}»`,
+      meta: {
+        userId: user.id,
+        username: user.username,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        inviteId,
+      },
+      actorUserId: userId,
+      broadcastWorkspaceIds: [invite.workspaceId],
+    });
+
+    await this.wssInternal.publishMemberJoined({
+      workspaceId: invite.workspaceId,
+      inviteId,
+      member: {
+        userId: user.id,
+        username: user.username,
+        firstName: user.firstName,
+        lastName: user.lastName,
+      },
+    });
+
+    return { ok: true as const, workspaceId: invite.workspaceId };
   }
 
   async remove(workspaceId: string, userId: string) {
