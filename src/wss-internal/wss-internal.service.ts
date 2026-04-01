@@ -56,6 +56,13 @@ export class WssInternalService {
     await this.post('/internal/events/action-created', payload);
   }
 
+  async publishClientDeleted(payload: {
+    workspaceIds: string[];
+    clientId: string;
+  }): Promise<void> {
+    await this.post('/internal/events/client-deleted', payload);
+  }
+
   async publishMemberJoined(payload: {
     workspaceId: string;
     member: {

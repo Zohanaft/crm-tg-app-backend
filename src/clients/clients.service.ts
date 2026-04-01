@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { WssInternalService } from '../wss-internal/wss-internal.service';
 
 interface TelegramStartFrom {
   id: number;
@@ -21,7 +22,10 @@ interface TelegramStartChat {
 
 @Injectable()
 export class ClientsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly wssInternal: WssInternalService,
+  ) {}
 
   async createOrLinkTelegramClientByStart(params: {
     telegramBotId: bigint;
@@ -209,6 +213,15 @@ export class ClientsService {
           where: { id: clientId },
         });
       }
+    });
+
+    const ownerWorkspaceIds = await this.prisma.workspace.findMany({
+      where: { ownerId: workspace.ownerId },
+      select: { id: true },
+    });
+    await this.wssInternal.publishClientDeleted({
+      workspaceIds: ownerWorkspaceIds.map((x) => x.id),
+      clientId,
     });
   }
 }
