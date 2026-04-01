@@ -115,9 +115,13 @@ export class WorkspaceService {
 
     const count = user._count.ownedWorkspaces;
     if (count >= plan.maxWorkspaces) {
-      throw new BadRequestException(
-        `Workspace limit reached for plan ${plan.name} (max ${plan.maxWorkspaces})`,
-      );
+      throw new BadRequestException({
+        code: 'errors.workspaceLimitReached',
+        params: {
+          plan: plan.name,
+          max: plan.maxWorkspaces,
+        },
+      });
     }
 
     const workspace = await this.prisma.workspace.create({

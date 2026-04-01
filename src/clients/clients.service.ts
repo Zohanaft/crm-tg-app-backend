@@ -157,4 +157,58 @@ export class ClientsService {
       updatedAt: c.updatedAt?.toISOString?.() ?? null,
     }));
   }
+
+  async removeForWorkspace(workspaceId: string, userId: string, clientId: string) {
+    if (!workspaceId) {
+      throw new BadRequestException('workspaceId is required');
+    }
+    if (!clientId) {
+      throw new BadRequestException('clientId is required');
+    }
+
+    const workspace = await this.prisma.workspace.findUnique({
+      where: { id: workspaceId },
+      select: { id: true, ownerId: true },
+    });
+    if (!workspace) {
+      throw new NotFoundException('Workspace not found');
+    }
+
+    const isMember = await this.prisma.workspaceMember.findFirst({
+      where: { workspaceId, userId },
+      select: { id: true },
+    });
+    if (!isMember) {
+      throw new ForbiddenException('Access denied');
+    }
+
+    const ownerLink = await this.prisma.clientOwner.findFirst({
+      where: {
+        clientId,
+        ownerId: workspace.ownerId,
+      },
+      select: { id: true },
+    });
+    if (!ownerLink) {
+      throw new NotFoundException('Client not found');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.clientOwner.deleteMany({
+        where: {
+          clientId,
+          ownerId: workspace.ownerId,
+        },
+      });
+
+      const restLinks = await tx.clientOwner.count({
+        where: { clientId },
+      });
+      if (restLinks === 0) {
+        await tx.client.delete({
+          where: { id: clientId },
+        });
+      }
+    });
+  }
 }

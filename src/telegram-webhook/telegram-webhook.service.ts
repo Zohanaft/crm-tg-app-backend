@@ -66,15 +66,16 @@ export class TelegramWebhookService {
     const title = `Новый клиент: ${saved.client.firstName}${
       saved.client.username ? ` @${saved.client.username}` : ''
     }`;
-    for (const workspaceId of saved.workspaceIds) {
+    if (saved.workspaceIds.length > 0) {
       void this.actionsService
         .createAndBroadcast({
-          workspaceId,
+          workspaceId: saved.workspaceIds[0],
           type: 'NEW_CLIENT',
           title,
           meta: { client: saved.client, ownerId: saved.ownerId },
           actorUserId: saved.ownerId,
-          broadcastWorkspaceIds: [workspaceId],
+          dedupKey: `new-client:${saved.client.telegramId}`,
+          broadcastWorkspaceIds: saved.workspaceIds,
         })
         .catch(() => {});
     }

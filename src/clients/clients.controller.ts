@@ -1,7 +1,11 @@
 import {
   BadRequestException,
   Controller,
+  Delete,
   Get,
+  HttpCode,
+  HttpStatus,
+  Param,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -33,5 +37,26 @@ export class ClientsController {
       throw new BadRequestException('workspaceId is required');
     }
     return this.clientsService.listForWorkspace(workspaceId, user.id);
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary: 'Удалить клиента из workspace',
+    description:
+      'Удаляет связь клиента с владельцем выбранного workspace. Если у клиента больше нет владельцев, удаляет клиента полностью.',
+  })
+  @ApiResponse({ status: 204, description: 'Клиент удалён' })
+  @ApiResponse({ status: 401, description: 'Требуется авторизация' })
+  @ApiResponse({ status: 404, description: 'Клиент или workspace не найден' })
+  async removeForWorkspace(
+    @Param('id') clientId: string,
+    @Query('workspaceId') workspaceId: string,
+    @CurrentUser() user: User,
+  ) {
+    if (!workspaceId) {
+      throw new BadRequestException('workspaceId is required');
+    }
+    await this.clientsService.removeForWorkspace(workspaceId, user.id, clientId);
   }
 }

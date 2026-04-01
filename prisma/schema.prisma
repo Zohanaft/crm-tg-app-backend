@@ -40,6 +40,7 @@ model User {
   invitesReceived  WorkspaceInvite[] @relation("InviteInvitee")
   actionsAsActor   Action[]          @relation("ActionActor")
   actionsAsRecipient Action[]        @relation("ActionRecipient")
+  actionReads      ActionRead[]
 
   @@map("users")
 }
@@ -95,11 +96,27 @@ model Action {
   actor            User?     @relation("ActionActor", fields: [actorUserId], references: [id], onDelete: SetNull)
   recipientUserId  String?
   recipient        User?     @relation("ActionRecipient", fields: [recipientUserId], references: [id], onDelete: Cascade)
+  dedupKey         String?
+  reads            ActionRead[]
   createdAt        DateTime  @default(now())
 
   @@index([workspaceId, createdAt])
   @@index([recipientUserId])
+  @@unique([workspaceId, type, dedupKey])
   @@map("actions")
+}
+
+model ActionRead {
+  id        String   @id @default(cuid())
+  actionId  String
+  action    Action   @relation(fields: [actionId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  readAt    DateTime @default(now())
+
+  @@unique([actionId, userId])
+  @@index([userId, readAt])
+  @@map("action_reads")
 }
 
 model WorkspaceMember {

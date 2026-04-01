@@ -1,4 +1,4 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
 import {
   ApiOperation,
   ApiQuery,
@@ -32,5 +32,18 @@ export class ActionsController {
       userId: user.id,
       workspaceId: workspaceId?.trim() || undefined,
     });
+  }
+
+  @Post(':id/read')
+  @ApiOperation({
+    summary: 'Отметить уведомление как прочитанное',
+    description: 'Фиксирует readAt для текущего пользователя.',
+  })
+  @ApiResponse({ status: 200 })
+  markRead(
+    @CurrentUser() user: User,
+    @Param('id') id: string,
+  ) {
+    return this.actionsService.markRead(user.id, id);
   }
 }
