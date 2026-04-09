@@ -146,7 +146,7 @@ export class BotsService {
       if (!/^https:\/\//i.test(cleanBase)) {
         await this.prisma.tgBot.delete({ where: { id: bot.id } });
         throw new BadRequestException(
-          'Webhook URL must use https:// for Telegram (public domain). For local dev set TELEGRAM_WEBHOOK_SKIP=true, or set TELEGRAM_WEBHOOK_BASE_URL explicitly (e.g. https://zohanafttcrm.com or https://zohanafttcrm.com/api/wss).',
+          'Webhook URL must use https:// for Telegram (public domain). For local dev set TELEGRAM_WEBHOOK_SKIP=true, or set TELEGRAM_WEBHOOK_BASE_URL explicitly (e.g. https://devtbookflow.nl.tuna.am or https://devtbookflow.nl.tuna.am/api/wss).',
         );
       }
       const webhookPath = '/api/wss/telegram/webhook';

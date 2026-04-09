@@ -42,7 +42,7 @@ function parseCfVisitorScheme(
   }
 }
 
-/** Public hostname (e.g. zohanafttcrm.com), not localhost / docker service name without dots */
+/** Public hostname (e.g. devtbookflow.nl.tuna.am), not localhost / docker service name without dots */
 function looksLikePublicHostname(hostname: string): boolean {
   const h = hostname.split(':')[0].toLowerCase();
   if (h === 'localhost' || h === '127.0.0.1' || h === '::1') return false;
