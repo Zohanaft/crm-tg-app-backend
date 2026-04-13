@@ -9,7 +9,13 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiOperation,
+  ApiParam,
+  ApiQuery,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import type { User } from '../generated/prisma/client';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator.js';
@@ -27,7 +33,13 @@ export class ClientsController {
     description:
       'Возвращает клиентов, которые относятся к владельцу workspace текущего пользователя.',
   })
+  @ApiQuery({
+    name: 'workspaceId',
+    required: true,
+    description: 'ID рабочего пространства',
+  })
   @ApiResponse({ status: 200, description: 'Список клиентов' })
+  @ApiResponse({ status: 400, description: 'Не передан workspaceId' })
   @ApiResponse({ status: 401, description: 'Требуется авторизация' })
   async listForWorkspace(
     @Query('workspaceId') workspaceId: string,
@@ -46,7 +58,14 @@ export class ClientsController {
     description:
       'Удаляет связь клиента с владельцем выбранного workspace. Если у клиента больше нет владельцев, удаляет клиента полностью.',
   })
+  @ApiParam({ name: 'id', description: 'ID клиента' })
+  @ApiQuery({
+    name: 'workspaceId',
+    required: true,
+    description: 'ID рабочего пространства',
+  })
   @ApiResponse({ status: 204, description: 'Клиент удалён' })
+  @ApiResponse({ status: 400, description: 'Не передан workspaceId' })
   @ApiResponse({ status: 401, description: 'Требуется авторизация' })
   @ApiResponse({ status: 404, description: 'Клиент или workspace не найден' })
   async removeForWorkspace(

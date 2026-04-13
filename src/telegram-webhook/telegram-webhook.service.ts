@@ -1,10 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ClientsService } from '../clients/clients.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ActionsService } from '../actions/actions.service';
 import { WssInternalService } from '../wss-internal/wss-internal.service';
 
 interface TelegramWebhookUpdate {
+  update_id?: number;
   message?: {
     from?: {
       id: number;
@@ -23,6 +24,8 @@ interface TelegramWebhookUpdate {
 
 @Injectable()
 export class TelegramWebhookService {
+  private readonly logger = new Logger(TelegramWebhookService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly clientsService: ClientsService,
@@ -31,7 +34,9 @@ export class TelegramWebhookService {
   ) {}
 
   async handle(secret: string, body: TelegramWebhookUpdate) {
-    console.log('[telegram-webhook] update:', JSON.stringify(body));
+    this.logger.log(
+      `update update_id=${body.update_id ?? 'n/a'} hasMessage=${Boolean(body?.message)}`,
+    );
 
     const bot = await this.prisma.tgBot.findFirst({
       where: { webhookSecret: secret },
@@ -47,19 +52,15 @@ export class TelegramWebhookService {
       return { ok: true };
     }
 
-    console.log('[telegram-webhook] /start:', {
-      botId: String(bot.botId),
-      fromId: from.id,
-      chatId: body?.message?.chat?.id,
-      chatType: body?.message?.chat?.type,
-      username: from.username ?? null,
-    });
-
     const saved = await this.clientsService.createOrLinkTelegramClientByStart({
       telegramBotId: bot.botId,
       from,
       chat: body?.message?.chat,
     });
+
+    this.logger.log(
+      `/start botId=${String(bot.botId)} fromId=${from.id} clientId=${saved.client.id} workspaces=${saved.workspaceIds.length}`,
+    );
 
     await this.wssInternal.publishClientStart(saved);
 

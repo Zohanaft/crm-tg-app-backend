@@ -20,6 +20,7 @@ import {
 } from '@nestjs/swagger';
 import type { User } from '../generated/prisma/client';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { WssCookieAuthGuard } from '../auth/wss-cookie-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { WorkspaceService } from './workspace.service';
 import { CreateWorkspaceDto } from './dto/create-workspace.dto';
@@ -28,11 +29,11 @@ import { CreateWorkspaceInviteDto } from './dto/create-workspace-invite.dto';
 
 @ApiTags('Рабочие пространства')
 @Controller('workspace')
-@UseGuards(JwtAuthGuard)
 export class WorkspaceController {
   constructor(private readonly workspaceService: WorkspaceService) {}
 
   @Get('me')
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({
     summary: 'Мои рабочие пространства',
     description: 'Список workspace текущего пользователя (как владельца).',
@@ -44,6 +45,7 @@ export class WorkspaceController {
   }
 
   @Get('wss/auth')
+  @UseGuards(WssCookieAuthGuard)
   @ApiOperation({
     summary: 'Авторизация для WSS',
     description:
@@ -62,6 +64,7 @@ export class WorkspaceController {
   }
 
   @Get('invites/me')
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Мои ожидающие приглашения в workspace' })
   @ApiResponse({ status: 200 })
   myPendingInvites(@CurrentUser() user: User) {
@@ -69,6 +72,7 @@ export class WorkspaceController {
   }
 
   @Post('invites/:inviteId/accept')
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Принять приглашение в workspace' })
   @ApiParam({ name: 'inviteId', description: 'ID приглашения' })
   @ApiResponse({ status: 200 })
@@ -81,6 +85,7 @@ export class WorkspaceController {
   }
 
   @Post(':workspaceId/invites')
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Пригласить пользователя в workspace' })
   @ApiParam({ name: 'workspaceId', description: 'ID рабочего пространства' })
   @ApiBody({ type: CreateWorkspaceInviteDto })
@@ -97,7 +102,54 @@ export class WorkspaceController {
     );
   }
 
+  @Get(':workspaceId/members')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
+    summary: 'Участники workspace',
+    description:
+      'Список участников по ID рабочего пространства. Доступно только участникам этого workspace.',
+  })
+  @ApiParam({ name: 'workspaceId', description: 'ID рабочего пространства' })
+  @ApiResponse({ status: 200, description: 'Массив участников с полями пользователя' })
+  @ApiResponse({ status: 401, description: 'Требуется авторизация' })
+  @ApiResponse({ status: 403, description: 'Нет доступа к workspace' })
+  @ApiResponse({ status: 404, description: 'Workspace не найден' })
+  listMembers(
+    @CurrentUser() user: User,
+    @Param('workspaceId') workspaceId: string,
+  ) {
+    return this.workspaceService.listMembers(workspaceId, user.id);
+  }
+
+  @Delete(':workspaceId/members/:userId')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary: 'Исключить участника из workspace',
+    description:
+      'Только владелец пространства может исключить участника. Владельца исключить нельзя.',
+  })
+  @ApiParam({ name: 'workspaceId', description: 'ID рабочего пространства' })
+  @ApiParam({ name: 'userId', description: 'ID пользователя (участника) для исключения' })
+  @ApiResponse({ status: 204, description: 'Участник исключён' })
+  @ApiResponse({ status: 400, description: 'Нельзя исключить владельца' })
+  @ApiResponse({ status: 401, description: 'Требуется авторизация' })
+  @ApiResponse({ status: 403, description: 'Только владелец может исключать' })
+  @ApiResponse({ status: 404, description: 'Workspace или участник не найден' })
+  async removeMember(
+    @CurrentUser() user: User,
+    @Param('workspaceId') workspaceId: string,
+    @Param('userId') targetUserId: string,
+  ) {
+    await this.workspaceService.removeMember(
+      workspaceId,
+      user.id,
+      targetUserId,
+    );
+  }
+
   @Get(':ownerId')
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({
     summary: 'Список пространств по владельцу',
     description:
@@ -121,6 +173,7 @@ export class WorkspaceController {
   }
 
   @Post()
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({
     summary: 'Создать рабочее пространство',
     description:
@@ -138,6 +191,7 @@ export class WorkspaceController {
   }
 
   @Patch(':id')
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({
     summary: 'Обновить рабочее пространство',
     description: 'Изменить название. Только владелец может обновлять.',
@@ -163,6 +217,7 @@ export class WorkspaceController {
   }
 
   @Delete(':id')
+  @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({
     summary: 'Удалить рабочее пространство',

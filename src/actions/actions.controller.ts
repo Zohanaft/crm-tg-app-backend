@@ -1,6 +1,7 @@
 import { Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
 import {
   ApiOperation,
+  ApiParam,
   ApiQuery,
   ApiResponse,
   ApiTags,
@@ -39,6 +40,7 @@ export class ActionsController {
     summary: 'Отметить уведомление как прочитанное',
     description: 'Фиксирует readAt для текущего пользователя.',
   })
+  @ApiParam({ name: 'id', description: 'ID уведомления (действия)' })
   @ApiResponse({ status: 200 })
   markRead(
     @CurrentUser() user: User,

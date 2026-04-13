@@ -11,7 +11,7 @@ export class UsersService {
     currentUserId: string;
   }) {
     const { workspaceId, q, currentUserId } = params;
-    const trimmed = q.trim();
+    const trimmed = q.trim().replace(/^@+/, '');
     if (trimmed.length < 1) {
       return [];
     }

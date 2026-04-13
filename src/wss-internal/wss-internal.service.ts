@@ -18,12 +18,18 @@ export class WssInternalService {
     if (!base) {
       return;
     }
+    if (!this.sharedSecret) {
+      this.logger.warn(
+        `WSS_SHARED_SECRET is not set; skip publish ${path} (configure env to enable realtime)`,
+      );
+      return;
+    }
     try {
       await fetch(`${base}${path}`, {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
-          ...(this.sharedSecret ? { 'x-wss-shared-secret': this.sharedSecret } : {}),
+          'x-wss-shared-secret': this.sharedSecret,
         },
         body: JSON.stringify(body),
       });
@@ -37,6 +43,7 @@ export class WssInternalService {
     ownerId: string;
     workspaceIds: string[];
     client: {
+      id: string;
       telegramId: string;
       isBot: boolean;
       firstName: string;
@@ -44,6 +51,8 @@ export class WssInternalService {
       username: string | null;
       chatId: string | null;
       chatType: string | null;
+      createdAt: string | null;
+      updatedAt: string | null;
     };
   }): Promise<void> {
     await this.post('/internal/events/client-start', payload);
@@ -74,5 +83,12 @@ export class WssInternalService {
     inviteId: string;
   }): Promise<void> {
     await this.post('/internal/events/workspace-member-joined', payload);
+  }
+
+  async publishMemberRemoved(payload: {
+    workspaceId: string;
+    removedUserId: string;
+  }): Promise<void> {
+    await this.post('/internal/events/workspace-member-removed', payload);
   }
 }

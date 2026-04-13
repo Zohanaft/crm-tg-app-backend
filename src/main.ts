@@ -1,36 +1,27 @@
-import { config } from 'dotenv';
+import './load-env';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import {
-  SwaggerModule,
-  DocumentBuilder,
-  SwaggerCustomOptions,
-} from '@nestjs/swagger';
+import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
-
-const envPath =
-  process.env.DOTENV_CONFIG_PATH ??
-  (process.env.NODE_ENV === 'development' ? '.env.local' : '.env');
-config({ path: envPath });
-
-// Ensure DATABASE_URL is set for Prisma (from POSTGRES_* if needed)
-if (
-  !process.env.DATABASE_URL &&
-  process.env.POSTGRES_DB_USER &&
-  process.env.POSTGRES_DB_PASSWORD &&
-  process.env.POSTGRES_DB_NAME
-) {
-  const host = process.env.POSTGRES_HOST ?? 'localhost';
-  const port = process.env.POSTGRES_PORT ?? '5432';
-  const user = encodeURIComponent(process.env.POSTGRES_DB_USER);
-  const password = encodeURIComponent(process.env.POSTGRES_DB_PASSWORD);
-  const dbName = encodeURIComponent(process.env.POSTGRES_DB_NAME);
-  process.env.DATABASE_URL = `postgresql://${user}:${password}@${host}:${port}/${dbName}`;
-}
+import helmet from 'helmet';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  app.use(
+    helmet({
+      contentSecurityPolicy: false,
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+    }),
+  );
   app.use(cookieParser());
+
+  const corsOrigin = process.env.CORS_ORIGIN?.trim();
+  if (corsOrigin) {
+    app.enableCors({
+      origin: corsOrigin.split(',').map((s) => s.trim()),
+      credentials: true,
+    });
+  }
 
   const isProduction = process.env.NODE_ENV === 'production';
   if (!isProduction) {

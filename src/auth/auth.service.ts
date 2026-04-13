@@ -19,11 +19,11 @@ export interface TelegramAuthPayload {
   hash: string;
 }
 
-export interface TokenPayload {
+export type TokenPayload = {
   sub: string;
   telegramId: string;
   type: 'access' | 'refresh';
-}
+};
 
 @Injectable()
 export class AuthService {

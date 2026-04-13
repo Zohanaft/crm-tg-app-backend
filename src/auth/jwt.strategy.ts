@@ -24,7 +24,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       jwtFromRequest: ExtractJwt.fromExtractors([
         (req: Request) => extractFromCookieOrBearer(req),
       ]),
-      secretOrKey: process.env.JWT_SECRET ?? 'change-me-in-production',
+      secretOrKey: process.env.JWT_SECRET?.trim() || 'change-me-in-production',
       ignoreExpiration: false,
     });
   }

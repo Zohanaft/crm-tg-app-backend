@@ -8,7 +8,9 @@ import {
   Req,
   Res,
   UnauthorizedException,
+  UseGuards,
 } from '@nestjs/common';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import {
   ApiBody,
   ApiOperation,
@@ -50,6 +52,8 @@ const secureSuffix = process.env.NODE_ENV === 'production' ? '; Secure' : '';
 
 @ApiTags('Авторизация')
 @Controller()
+@UseGuards(ThrottlerGuard)
+@Throttle({ default: { limit: 30, ttl: 60_000 } })
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 

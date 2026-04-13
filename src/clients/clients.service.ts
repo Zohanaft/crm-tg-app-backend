@@ -71,6 +71,8 @@ export class ClientsService {
         username: true,
         chatId: true,
         chatType: true,
+        createdAt: true,
+        updatedAt: true,
       },
     });
 
@@ -100,6 +102,8 @@ export class ClientsService {
         ...client,
         telegramId: String(client.telegramId),
         chatId: client.chatId ? String(client.chatId) : null,
+        createdAt: client.createdAt?.toISOString?.() ?? null,
+        updatedAt: client.updatedAt?.toISOString?.() ?? null,
       },
     };
   }
@@ -197,7 +201,24 @@ export class ClientsService {
       throw new NotFoundException('Client not found');
     }
 
+    const clientRow = await this.prisma.client.findUnique({
+      where: { id: clientId },
+      select: { telegramId: true },
+    });
+    if (!clientRow) {
+      throw new NotFoundException('Client not found');
+    }
+    const newClientDedupKey = `new-client:${clientRow.telegramId.toString()}`;
+
     await this.prisma.$transaction(async (tx) => {
+      await tx.action.deleteMany({
+        where: {
+          type: 'NEW_CLIENT',
+          dedupKey: newClientDedupKey,
+          workspace: { ownerId: workspace.ownerId },
+        },
+      });
+
       await tx.clientOwner.deleteMany({
         where: {
           clientId,

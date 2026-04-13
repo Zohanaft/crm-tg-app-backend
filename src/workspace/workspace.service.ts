@@ -194,6 +194,81 @@ export class WorkspaceService {
     }
   }
 
+  async listMembers(workspaceId: string, requesterId: string) {
+    const workspace = await this.prisma.workspace.findUnique({
+      where: { id: workspaceId },
+      select: { id: true },
+    });
+    if (!workspace) {
+      throw new NotFoundException('Workspace not found');
+    }
+    await this.assertWorkspaceMember(workspaceId, requesterId);
+
+    const rows = await this.prisma.workspaceMember.findMany({
+      where: { workspaceId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            username: true,
+            firstName: true,
+            lastName: true,
+            photoUrl: true,
+          },
+        },
+      },
+      orderBy: { id: 'asc' },
+    });
+
+    return rows.map((row) => ({
+      id: row.id,
+      userId: row.user.id,
+      username: row.user.username,
+      firstName: row.user.firstName,
+      lastName: row.user.lastName,
+      photoUrl: row.user.photoUrl,
+    }));
+  }
+
+  async removeMember(
+    workspaceId: string,
+    actorId: string,
+    targetUserId: string,
+  ) {
+    const workspace = await this.prisma.workspace.findUnique({
+      where: { id: workspaceId },
+      select: { id: true, ownerId: true },
+    });
+    if (!workspace) {
+      throw new NotFoundException('Workspace not found');
+    }
+    if (workspace.ownerId !== actorId) {
+      throw new ForbiddenException('Only the workspace owner can remove members');
+    }
+    if (targetUserId === workspace.ownerId) {
+      throw new BadRequestException('Cannot remove the workspace owner');
+    }
+
+    const membership = await this.prisma.workspaceMember.findFirst({
+      where: { workspaceId, userId: targetUserId },
+      select: { id: true },
+    });
+    if (!membership) {
+      throw new NotFoundException('Member not found');
+    }
+
+    await this.prisma.workspaceMember.delete({
+      where: { id: membership.id },
+    });
+
+    await this.cache.del(`${WORKSPACES_CACHE_KEY_PREFIX}${workspace.ownerId}`);
+
+    await this.wssInternal.publishMemberRemoved({
+      workspaceId,
+      removedUserId: targetUserId,
+    });
+  }
+
   async createInvite(
     workspaceId: string,
     inviterId: string,
