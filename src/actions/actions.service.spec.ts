@@ -27,20 +27,15 @@ describe('ActionsService', () => {
   });
 
   describe('listForUser', () => {
-    it('personal mode: OR only actor or recipient equals user', async () => {
-      prisma.workspaceMember.findMany.mockResolvedValue([{ workspaceId: 'ws1' }]);
+    it('personal mode: actor or recipient only, no workspace membership filter', async () => {
       prisma.action.findMany.mockResolvedValue([]);
 
       await service.listForUser({ userId: 'u1' });
 
+      expect(prisma.workspaceMember.findMany).not.toHaveBeenCalled();
       expect(prisma.action.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: {
-            AND: [
-              { workspaceId: { in: ['ws1'] } },
-              { OR: [{ actorUserId: 'u1' }, { recipientUserId: 'u1' }] },
-            ],
-          },
+          where: { OR: [{ actorUserId: 'u1' }, { recipientUserId: 'u1' }] },
         }),
       );
     });
@@ -78,7 +73,7 @@ describe('ActionsService', () => {
       expect(prisma.action.findMany).not.toHaveBeenCalled();
     });
 
-    it('normalizes CSV and legacy workspaceId into history scope', async () => {
+    it('normalizes CSV workspaceIds into history scope', async () => {
       prisma.workspaceMember.findMany.mockResolvedValue([
         { workspaceId: 'ws1' },
         { workspaceId: 'ws2' },
@@ -88,7 +83,6 @@ describe('ActionsService', () => {
       await service.listForUser({
         userId: 'u1',
         workspaceIds: 'ws1, ws2',
-        workspaceId: 'ws1',
       });
 
       expect(prisma.action.findMany).toHaveBeenCalledWith(
@@ -105,7 +99,7 @@ describe('ActionsService', () => {
   });
 
   describe('markRead', () => {
-    it('allows actor when recipient is another user', async () => {
+    it('allows actor when recipient is another user (no workspace membership required)', async () => {
       prisma.action.findUnique.mockResolvedValue({
         id: 'a1',
         workspaceId: 'ws1',
@@ -118,10 +112,50 @@ describe('ActionsService', () => {
         createdAt: new Date(),
         reads: [],
       });
-      prisma.workspaceMember.findFirst.mockResolvedValue({ id: 'm1' });
+      prisma.workspaceMember.findFirst.mockResolvedValue(null);
       prisma.actionRead.upsert.mockResolvedValue({ readAt: new Date() });
 
       await expect(service.markRead('u1', 'a1')).resolves.toBeDefined();
+      expect(prisma.workspaceMember.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('allows recipient personal action without workspace membership', async () => {
+      prisma.action.findUnique.mockResolvedValue({
+        id: 'a1',
+        workspaceId: 'ws1',
+        type: 'T',
+        title: 't',
+        meta: null,
+        actorUserId: 'u0',
+        recipientUserId: 'u1',
+        dedupKey: null,
+        createdAt: new Date(),
+        reads: [],
+      });
+      prisma.actionRead.upsert.mockResolvedValue({ readAt: new Date() });
+
+      await expect(service.markRead('u1', 'a1')).resolves.toBeDefined();
+      expect(prisma.workspaceMember.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('broadcast: requires workspace membership when user is not actor', async () => {
+      prisma.action.findUnique.mockResolvedValue({
+        id: 'a1',
+        workspaceId: 'ws1',
+        type: 'T',
+        title: 't',
+        meta: null,
+        actorUserId: 'u0',
+        recipientUserId: null,
+        dedupKey: null,
+        createdAt: new Date(),
+        reads: [],
+      });
+      prisma.workspaceMember.findFirst.mockResolvedValue(null);
+
+      await expect(service.markRead('u1', 'a1')).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
     });
 
     it('forbids user who is neither recipient, actor, nor broadcast', async () => {

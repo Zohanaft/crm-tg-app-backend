@@ -65,6 +65,14 @@ export class WssInternalService {
     await this.post('/internal/events/action-created', payload);
   }
 
+  /** Personal feed: deliver action to `user:{userId}` room (e.g. invites, recipient-only rows). */
+  async publishActionToUser(payload: {
+    userId: string;
+    action: Record<string, unknown>;
+  }): Promise<void> {
+    await this.post('/internal/events/user-action', payload);
+  }
+
   async publishClientDeleted(payload: {
     workspaceIds: string[];
     clientId: string;

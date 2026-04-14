@@ -21,14 +21,8 @@ export class ActionsController {
   @ApiOperation({
     summary: 'Лента действий / уведомлений',
     description:
-      'Без workspaceId/workspaceIds — личная лента: только записи, где вы actor или recipient, по всем вашим workspace. ' +
-      'С workspaceId или непустым workspaceIds — история выбранных пространств: также общие (recipient пустой), персональные только свои; нужно быть участником каждого id. ' +
-      'workspaceId эквивалентен одному элементу в workspaceIds.',
-  })
-  @ApiQuery({
-    name: 'workspaceId',
-    required: false,
-    description: 'Один workspace; режим истории (как workspaceIds из одного id)',
+      'Без workspaceIds — личная лента: только записи, где вы actor или recipient (включая workspace, из которого вас исключили). ' +
+      'Непустой workspaceIds — история выбранных пространств: общие (recipient пустой), персональные только свои; нужно быть участником каждого id.',
   })
   @ApiQuery({
     name: 'workspaceIds',
@@ -40,12 +34,10 @@ export class ActionsController {
   @ApiResponse({ status: 200 })
   list(
     @CurrentUser() user: User,
-    @Query('workspaceId') workspaceId?: string,
     @Query('workspaceIds') workspaceIds?: string | string[],
   ) {
     return this.actionsService.listForUser({
       userId: user.id,
-      workspaceId: workspaceId?.trim() || undefined,
       workspaceIds,
     });
   }

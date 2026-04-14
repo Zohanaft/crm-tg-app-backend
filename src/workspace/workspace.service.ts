@@ -237,7 +237,7 @@ export class WorkspaceService {
   ) {
     const workspace = await this.prisma.workspace.findUnique({
       where: { id: workspaceId },
-      select: { id: true, ownerId: true },
+      select: { id: true, ownerId: true, name: true },
     });
     if (!workspace) {
       throw new NotFoundException('Workspace not found');
@@ -256,6 +256,29 @@ export class WorkspaceService {
     if (!membership) {
       throw new NotFoundException('Member not found');
     }
+
+    const actor = await this.prisma.user.findUnique({
+      where: { id: actorId },
+      select: { username: true, firstName: true },
+    });
+    const actorLabel =
+      actor?.firstName?.trim() ||
+      actor?.username?.trim() ||
+      'Владелец workspace';
+
+    await this.actionsService.createAndBroadcast({
+      workspaceId,
+      type: 'WORKSPACE_MEMBER_REMOVED',
+      title: `Вас исключили из «${workspace.name}» (${actorLabel})`,
+      meta: {
+        workspaceId,
+        workspaceName: workspace.name,
+        removedByUserId: actorId,
+      },
+      actorUserId: actorId,
+      recipientUserId: targetUserId,
+      broadcast: false,
+    });
 
     await this.prisma.workspaceMember.delete({
       where: { id: membership.id },

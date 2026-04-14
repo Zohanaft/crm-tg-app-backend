@@ -137,9 +137,8 @@ export class ActionsService implements OnModuleInit {
     };
   }
 
-  /** Parse workspaceIds query (CSV and/or repeated param) plus optional legacy workspaceId. */
+  /** Parse workspaceIds query (CSV and/or repeated param). */
   private normalizeRequestedWorkspaceIds(
-    workspaceId?: string,
     workspaceIds?: string | string[],
   ): string[] {
     const out: string[] = [];
@@ -153,62 +152,48 @@ export class ActionsService implements OnModuleInit {
         }
       }
     }
-    const single = workspaceId?.trim();
-    if (single) out.push(single);
     return [...new Set(out)];
   }
 
   async listForUser(params: {
     userId: string;
-    workspaceId?: string;
     workspaceIds?: string | string[];
     limit?: number;
   }): Promise<ActionDto[]> {
-    const { userId, workspaceId, workspaceIds, limit = 50 } = params;
+    const { userId, workspaceIds, limit = 50 } = params;
 
-    const membershipIds = await this.prisma.workspaceMember.findMany({
-      where: { userId },
-      select: { workspaceId: true },
-    });
-    const allowedWorkspaceIds = membershipIds.map((m) => m.workspaceId);
-
-    const requested = this.normalizeRequestedWorkspaceIds(
-      workspaceId,
-      workspaceIds,
-    );
+    const requested = this.normalizeRequestedWorkspaceIds(workspaceIds);
     const isHistoryMode = requested.length > 0;
 
-    let targetWorkspaceIds: string[];
+    let where: Prisma.ActionWhereInput;
+
     if (isHistoryMode) {
+      const membershipIds = await this.prisma.workspaceMember.findMany({
+        where: { userId },
+        select: { workspaceId: true },
+      });
+      const allowedWorkspaceIds = membershipIds.map((m) => m.workspaceId);
       for (const id of requested) {
         if (!allowedWorkspaceIds.includes(id)) {
           throw new ForbiddenException('Access denied');
         }
       }
-      targetWorkspaceIds = requested;
+      const visibilityWhere: Prisma.ActionWhereInput = {
+        OR: [
+          { recipientUserId: null },
+          { recipientUserId: userId },
+          { actorUserId: userId },
+        ],
+      };
+      where = {
+        AND: [{ workspaceId: { in: requested } }, visibilityWhere],
+      };
     } else {
-      targetWorkspaceIds = allowedWorkspaceIds;
+      /** Личная лента: только actor/recipient; без фильтра по членству (уведомления после исключения из workspace). */
+      where = {
+        OR: [{ actorUserId: userId }, { recipientUserId: userId }],
+      };
     }
-
-    if (targetWorkspaceIds.length === 0) {
-      return [];
-    }
-
-    const visibilityWhere: Prisma.ActionWhereInput = isHistoryMode
-      ? {
-          OR: [
-            { recipientUserId: null },
-            { recipientUserId: userId },
-            { actorUserId: userId },
-          ],
-        }
-      : {
-          OR: [{ actorUserId: userId }, { recipientUserId: userId }],
-        };
-
-    const where: Prisma.ActionWhereInput = {
-      AND: [{ workspaceId: { in: targetWorkspaceIds } }, visibilityWhere],
-    };
 
     const rows = await this.prisma.action.findMany({
       where,
@@ -243,19 +228,21 @@ export class ActionsService implements OnModuleInit {
       throw new NotFoundException('Action not found');
     }
 
-    const canMarkRead =
-      row.recipientUserId === null ||
-      row.recipientUserId === userId ||
-      row.actorUserId === userId;
-    if (!canMarkRead) {
-      throw new ForbiddenException('Access denied');
-    }
+    const isActor = row.actorUserId === userId;
+    const isRecipient = row.recipientUserId === userId;
+    const isBroadcast = row.recipientUserId === null;
 
-    const membership = await this.prisma.workspaceMember.findFirst({
-      where: { workspaceId: row.workspaceId, userId },
-      select: { id: true },
-    });
-    if (!membership) {
+    if (isActor || isRecipient) {
+      // персональные / свои действия — без проверки членства (в т.ч. после исключения из workspace)
+    } else if (isBroadcast) {
+      const membership = await this.prisma.workspaceMember.findFirst({
+        where: { workspaceId: row.workspaceId, userId },
+        select: { id: true },
+      });
+      if (!membership) {
+        throw new ForbiddenException('Access denied');
+      }
+    } else {
       throw new ForbiddenException('Access denied');
     }
 
@@ -330,6 +317,10 @@ export class ActionsService implements OnModuleInit {
     const shouldBroadcast =
       params.broadcast ??
       (params.recipientUserId === null || params.recipientUserId === undefined);
+    const actionPayload = {
+      ...dto,
+      createdAt: dto.createdAt.toISOString(),
+    };
     if (shouldBroadcast) {
       const workspaceIds =
         params.broadcastWorkspaceIds && params.broadcastWorkspaceIds.length > 0
@@ -337,10 +328,12 @@ export class ActionsService implements OnModuleInit {
           : [params.workspaceId];
       await this.wss.publishActionCreated({
         workspaceIds,
-        action: {
-          ...dto,
-          createdAt: dto.createdAt.toISOString(),
-        },
+        action: actionPayload,
+      });
+    } else if (params.recipientUserId) {
+      await this.wss.publishActionToUser({
+        userId: params.recipientUserId,
+        action: actionPayload,
       });
     }
     return dto;
