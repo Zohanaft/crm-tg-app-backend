@@ -41,6 +41,7 @@ model User {
   actionsAsActor   Action[]          @relation("ActionActor")
   actionsAsRecipient Action[]        @relation("ActionRecipient")
   actionReads      ActionRead[]
+  productCards     ProductCard[]
 
   @@map("users")
 }
@@ -56,10 +57,52 @@ model Workspace {
   members   WorkspaceMember[]
   invites   WorkspaceInvite[]
   actions   Action[]
+  cardLinks CardWorkspace[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@map("workspaces")
+}
+
+model ProductCard {
+  id               String          @id @default(cuid())
+  title            String
+  description      String
+  workspaceOwnerId String
+  workspaceOwner   User            @relation(fields: [workspaceOwnerId], references: [id], onDelete: Cascade)
+  workspaceLinks   CardWorkspace[]
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@index([workspaceOwnerId])
+  @@map("product_cards")
+}
+
+model CardWorkspace {
+  id          String      @id @default(cuid())
+  cardId      String
+  card        ProductCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  workspaceId String
+  workspace   Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdAt   DateTime    @default(now())
+
+  @@unique([cardId, workspaceId])
+  @@index([cardId])
+  @@index([workspaceId])
+  @@map("card_workspace_links")
+}
+
+model FilesService {
+  id           String   @id @default(cuid())
+  url          String
+  cid          String
+  entityName   String
+  originalName String
+  key          String   @unique
+  createdAt    DateTime @default(now())
+
+  @@index([entityName, cid])
+  @@map("files_service")
 }
 
 enum WorkspaceInviteStatus {

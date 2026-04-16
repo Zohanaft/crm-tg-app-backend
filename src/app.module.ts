@@ -18,6 +18,7 @@ import { UsersModule } from './users/users.module';
 import { WorkspaceModule } from './workspace/workspace.module';
 import { WssInternalModule } from './wss-internal/wss-internal.module';
 import { ActionsModule } from './actions/actions.module';
+import { ProductCardsModule } from './product-cards/product-cards.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { ActionsModule } from './actions/actions.module';
     ChatsModule,
     MessagesModule,
     DealsModule,
+    ProductCardsModule,
     TelegramModule,
     TelegramWebhookModule,
   ],
